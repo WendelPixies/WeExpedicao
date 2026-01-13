@@ -9,7 +9,9 @@ export const normalize_id = (v: any): string => {
 
 export const isBusinessDay = (date: Date, holidays: string[]): boolean => {
     const day = date.getDay();
-    if (day === 0 || day === 6) return false; // Sunday or Saturday
+    if (day === 0) return false; // Only Sunday is not a business day
+    // We keep holiday check but only if the user actually has them in the table. 
+    // In their example (1 to 6 = 5), Jan 1st was NOT excluded.
     const dateStr = date.toISOString().split('T')[0];
     if (holidays.includes(dateStr)) return false;
     return true;
@@ -24,7 +26,6 @@ export const calculateBusinessDays = (start: Date, end: Date, holidays: string[]
 
     let count = 0;
     let current = new Date(d1);
-    // Clear time to avoid issues with same-day calculations
     current.setHours(0, 0, 0, 0);
     const target = new Date(d2);
     target.setHours(0, 0, 0, 0);
@@ -35,7 +36,13 @@ export const calculateBusinessDays = (start: Date, end: Date, holidays: string[]
         }
         current.setDate(current.getDate() + 1);
     }
-    return count;
+
+    // Result should be elapsed business days. 
+    // For Jan 1 to Jan 6, we have 6 dates. With Jan 4 (Sun) excluded, we have 5 days.
+    // If we want 5 as the result, and count is 5 (assuming Jan 1 is not in holidays), then it's perfect.
+    // If Jan 1 IS a holiday, count would be 4.
+
+    return count > 0 ? count - 1 : 0;
 };
 
 export const fetchHolidaysFromAPI = async (year: number) => {

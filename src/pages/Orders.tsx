@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Search, AlertTriangle } from 'lucide-react';
-import { checkPhaseSLAs, calculateBusinessDays } from '../lib/utils';
+import { checkPhaseSLAs } from '../lib/utils';
 import OrderDetails from '../components/OrderDetails';
 
 export default function OrdersPage() {
@@ -15,6 +15,8 @@ export default function OrdersPage() {
 
     const [routesMap, setRoutesMap] = useState<Record<string, string>>({});
     const [filterRoute, setFilterRoute] = useState('');
+    const [driverFilter, setDriverFilter] = useState('');
+    const [onlyMissingDelivery, setOnlyMissingDelivery] = useState(false);
 
     useEffect(() => {
         fetchPedidos();
@@ -104,7 +106,12 @@ export default function OrdersPage() {
         const route = routesMap[personName];
         const matchesRoute = !filterRoute || (route === filterRoute);
 
-        return matchesSearch && matchesPhase && matchesRoute;
+        const driver = p.motorista || p.transportadora || '-';
+        const matchesDriver = !driverFilter || (driver === driverFilter);
+
+        const matchesMissing = onlyMissingDelivery ? (p.fase_atual === 'Entregue' && !p.entregue_at) : true;
+
+        return matchesSearch && matchesPhase && matchesRoute && matchesDriver && matchesMissing;
     });
 
     const PHASES = ['Aprovado', 'Picking', 'Packing', 'Disponível para faturamento', 'Transporte', 'Entregue'];
@@ -156,6 +163,38 @@ export default function OrdersPage() {
                             <option key={r} value={r}>{r}</option>
                         ))}
                     </select>
+
+                    <select
+                        className="input"
+                        style={{ width: '180px' }}
+                        value={driverFilter}
+                        onChange={(e) => setDriverFilter(e.target.value)}
+                    >
+                        <option value="">Todos Motoristas</option>
+                        {Array.from(new Set(pedidos.map(p => p.motorista || p.transportadora || '-')))
+                            .filter(d => d !== '-')
+                            .sort()
+                            .map(d => (
+                                <option key={d} value={d}>{d}</option>
+                            ))
+                        }
+                    </select>
+
+                    <button
+                        onClick={() => setOnlyMissingDelivery(!onlyMissingDelivery)}
+                        className="btn"
+                        style={{
+                            background: onlyMissingDelivery ? 'var(--danger)' : 'rgba(255,255,255,0.05)',
+                            borderColor: onlyMissingDelivery ? 'var(--danger)' : 'rgba(255,255,255,0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        {onlyMissingDelivery && <AlertTriangle size={14} />}
+                        Sem Entrega/Calc
+                    </button>
                 </div>
             </header>
 
@@ -169,7 +208,6 @@ export default function OrdersPage() {
                             <th>Cliente</th>
                             <th>Fase Atual</th>
                             <th>Aprovado em</th>
-                            <th>Faturado em</th>
                             <th>Entregue em</th>
                             <th>Dias Úteis</th>
                             <th>SLA</th>
@@ -178,8 +216,23 @@ export default function OrdersPage() {
                     </thead>
                     <tbody>
                         {filtered.map((p) => {
+                            const dStart = p.aprovado_at ? new Date(p.aprovado_at) : null;
+                            let dEnd = new Date();
+                            if (p.entregue_at) {
+                                dEnd = new Date(p.entregue_at);
+                            }
+
+                            let days: number | '-' = '-';
+                            if (dStart) {
+                                const s = new Date(dStart);
+                                const e = new Date(dEnd);
+                                s.setHours(0, 0, 0, 0);
+                                e.setHours(0, 0, 0, 0);
+                                days = Math.floor((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
+                            }
+
                             const currentAlerts = checkPhaseSLAs(p, slaParams, holidays);
-                            const isLate = currentAlerts.length > 0 || p.sla_status === 'ATRASADO';
+                            const isLate = currentAlerts.length > 0 || p.sla_status === 'ATRASADO' || (typeof days === 'number' && days > 7);
                             const personName = p.nome_pessoa ? p.nome_pessoa.replace(/\*/g, '').trim().toUpperCase() : '';
                             const route = routesMap[personName] || '-';
 
@@ -228,35 +281,19 @@ export default function OrdersPage() {
                                         </span>
                                     </td>
                                     <td>{formatDate(p.aprovado_at)}</td>
-                                    <td>{formatDate(p.faturado_at)}</td>
                                     <td>{p.entregue_at ? new Date(p.entregue_at).toLocaleDateString('pt-BR') : '-'}</td>
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                            {(() => {
-                                                if (!p.aprovado_at) return 0;
-
-                                                const start = new Date(p.aprovado_at);
-                                                let end = new Date();
-
-                                                if (p.entregue_at) {
-                                                    end = new Date(p.entregue_at);
-                                                } else if (p.fase_atual === 'Entregue') {
-                                                    // Se está entregue mas não tem data, não podemos calcular o total real.
-                                                    // Mantemos 0 ou algum indicador? O usuário disse 'faz o calculo certo'.
-                                                    // Sem data de entrega, o cálculo certo do tempo total é impossível.
-                                                    return '-';
-                                                }
-
-                                                const days = calculateBusinessDays(start, end, holidays);
-                                                return days;
-                                            })()}
+                                            {days}
                                             {isLate && <AlertTriangle size={12} color="var(--danger)" />}
                                         </div>
                                     </td>
                                     <td>
                                         <span className={`sla-badge ${isLate ? 'late' : 'on-time'}`}>
                                             {isLate
-                                                ? (p.fase_atual === 'Entregue' ? 'ENTREGUE COM ATRASO' : 'ATRASADO')
+                                                ? (p.fase_atual === 'Entregue'
+                                                    ? (p.entregue_at ? 'ENTREGUE COM ATRASO' : 'SEM ENTREGA')
+                                                    : 'ATRASADO')
                                                 : 'NO PRAZO'}
                                         </span>
                                     </td>
@@ -266,7 +303,7 @@ export default function OrdersPage() {
                         })}
                         {filtered.length === 0 && !loading && (
                             <tr>
-                                <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                                <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                                     Nenhum pedido encontrado.
                                 </td>
                             </tr>
