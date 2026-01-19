@@ -97,26 +97,29 @@ export const determinePhase = (xlsxData: any, csvData: any): Phase => {
         return 'Cancelado';
     }
 
-    // 1. TRANSPORTE
-    // Regra 1: NF Emitida + Transporte (SOLICITADO PELO USUÁRIO)
-    // Regra 2: NF Emitida + Separação + Disponível para Retirada/Entrega
-    // Regra 3: Dados de logística que confirmem transporte
-    if ((f === 'nf emitida' && c === 'transporte') ||
-        (f === 'nf emitida' && (c === 'separação' || c === 'separacao') && d === 'disponível para retirada/entrega') ||
-        (csvData?.['Data de Coleta']) ||
-        ['Em transito', 'No cliente', 'em transito', 'no cliente'].includes(csvStatus)) {
+    const hasCsvDeliveryDate = csvData?._rawValues?.[28] || csvData?.['Data de Entrega'] || csvData?.['Data Entrega'];
+
+    // 1. ENTREGUE (CRITÉRIO ESTRITO: NF Emitida + Entregue + Entregue para Revendedor)
+    if ((f === 'nf emitida' && c === 'entregue' && d === 'entregue para revendedor') ||
+        (csvStatus === 'entregue' || csvStatus === 'entregue.')) {
+        return 'Entregue';
+    }
+
+    // 2. TRANSPORTE (CRITÉRIO ESTRITO: NF Emitida + Transporte)
+    if (f === 'nf emitida' && c === 'transporte') {
         return 'Transporte';
     }
 
-    // 2. ENTREGUE
-    // NF Emitida + Entregue + Entregue para Revendedor
-    // OU se tiver data de entrega no XLSX ou status CSV entregue ou data em AC (index 28)
-    const hasCsvDeliveryDate = csvData?._rawValues?.[28] || csvData?.['Data de Entrega'] || csvData?.['Data Entrega'];
-    if ((f === 'nf emitida' && c === 'entregue' && d === 'entregue para revendedor') ||
-        (csvStatus === 'entregue' || csvStatus === 'entregue.') ||
-        (dataEntrega) ||
-        (hasCsvDeliveryDate)) {
+    // 3. REGRAS LOGÍSTICAS E DATAS (PARA QUANDO NÃO HÁ STATUS EXPLÍCITO NO XLSX)
+    if (dataEntrega || hasCsvDeliveryDate) {
         return 'Entregue';
+    }
+
+    // Outros casos de Transporte
+    if ((f === 'nf emitida' && (c === 'separação' || c === 'separacao') && d === 'disponível para retirada/entrega') ||
+        (csvData?.['Data de Coleta']) ||
+        ['em transito', 'no cliente', 'em trânsito', 'no cliente.'].includes(csvStatus)) {
+        return 'Transporte';
     }
 
     // 3. DISPONÍVEL PARA FATURAMENTO
