@@ -97,18 +97,7 @@ export const determinePhase = (xlsxData: any, csvData: any): Phase => {
         return 'Cancelado';
     }
 
-    // 1. ENTREGUE
-    // NF Emitida + Entregue + Entregue para Revendedor
-    // OU se tiver data de entrega no XLSX ou status CSV entregue ou data em AC (index 28)
-    const hasCsvDeliveryDate = csvData?._rawValues?.[28] || csvData?.['Data de Entrega'] || csvData?.['Data Entrega'];
-    if ((f === 'nf emitida' && c === 'entregue' && d === 'entregue para revendedor') ||
-        (csvStatus === 'entregue' || csvStatus === 'entregue.') ||
-        (dataEntrega) ||
-        (hasCsvDeliveryDate)) {
-        return 'Entregue';
-    }
-
-    // 2. TRANSPORTE
+    // 1. TRANSPORTE
     // Regra 1: NF Emitida + Transporte (SOLICITADO PELO USUÁRIO)
     // Regra 2: NF Emitida + Separação + Disponível para Retirada/Entrega
     // Regra 3: Dados de logística que confirmem transporte
@@ -117,6 +106,17 @@ export const determinePhase = (xlsxData: any, csvData: any): Phase => {
         (csvData?.['Data de Coleta']) ||
         ['Em transito', 'No cliente', 'em transito', 'no cliente'].includes(csvStatus)) {
         return 'Transporte';
+    }
+
+    // 2. ENTREGUE
+    // NF Emitida + Entregue + Entregue para Revendedor
+    // OU se tiver data de entrega no XLSX ou status CSV entregue ou data em AC (index 28)
+    const hasCsvDeliveryDate = csvData?._rawValues?.[28] || csvData?.['Data de Entrega'] || csvData?.['Data Entrega'];
+    if ((f === 'nf emitida' && c === 'entregue' && d === 'entregue para revendedor') ||
+        (csvStatus === 'entregue' || csvStatus === 'entregue.') ||
+        (dataEntrega) ||
+        (hasCsvDeliveryDate)) {
+        return 'Entregue';
     }
 
     // 3. DISPONÍVEL PARA FATURAMENTO
