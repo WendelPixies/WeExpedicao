@@ -108,10 +108,14 @@ export const determinePhase = (xlsxData: any, csvData: any): Phase => {
         return 'Entregue';
     }
 
-    // 2. TRANSPORTE (CASO ESPECIAL DA TABELA)
-    // NF Emitida + Separação + Disponível para Retirada/Entrega
-    // (Pela tabela do usuário, isso vira TRANSPORTE agora)
-    if (f === 'nf emitida' && (c === 'separação' || c === 'separacao') && d === 'disponível para retirada/entrega') {
+    // 2. TRANSPORTE
+    // Regra 1: NF Emitida + Transporte (SOLICITADO PELO USUÁRIO)
+    // Regra 2: NF Emitida + Separação + Disponível para Retirada/Entrega
+    // Regra 3: Dados de logística que confirmem transporte
+    if ((f === 'nf emitida' && c === 'transporte') ||
+        (f === 'nf emitida' && (c === 'separação' || c === 'separacao') && d === 'disponível para retirada/entrega') ||
+        (csvData?.['Data de Coleta']) ||
+        ['Em transito', 'No cliente', 'em transito', 'no cliente'].includes(csvStatus)) {
         return 'Transporte';
     }
 
@@ -140,14 +144,6 @@ export const determinePhase = (xlsxData: any, csvData: any): Phase => {
         return 'Picking';
     }
 
-    // 6. TRANSPORTE (REGRA GERAL)
-    // NF Emitida + Transporte + (Qualquer detalhe em amarelo ou genérico)
-    // OU dados de logística que confirmem transporte
-    if ((f === 'nf emitida' && c === 'transporte') ||
-        (csvData?.['Data de Coleta']) ||
-        ['Em transito', 'No cliente'].includes(csvData?.Status)) {
-        return 'Transporte';
-    }
 
     // 7. APROVADO
     // Situação Fiscal: Não Faturado
