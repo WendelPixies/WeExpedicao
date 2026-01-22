@@ -296,6 +296,24 @@ export default function ImportPage() {
 
             if (consErr) throw consErr;
 
+            // 7. Track Daily Picking
+            // Identify orders currently in 'Picking' and add them to the daily tracker if not already there
+            const pickingOrders = uniqueConsolidated.filter((p: any) => p.fase_atual === 'Picking');
+
+            if (pickingOrders.length > 0) {
+                const today = new Date().toISOString().split('T')[0];
+                const trackerRows = pickingOrders.map((p: any) => ({
+                    pedido_id: p.pedido_id_interno,
+                    data_referencia: today
+                }));
+
+                const { error: trackErr } = await supabase
+                    .from('daily_picking_tracker')
+                    .upsert(trackerRows, { onConflict: 'pedido_id,data_referencia', ignoreDuplicates: true });
+
+                if (trackErr) console.error('Error tracking daily picking:', trackErr);
+            }
+
             const now = new Date();
             const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             setStatus({ type: 'success', message: `Importação concluída com sucesso às ${timeStr}!` });
