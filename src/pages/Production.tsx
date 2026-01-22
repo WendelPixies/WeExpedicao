@@ -109,11 +109,54 @@ export default function Production() {
         ? Math.round((data.completed / data.totalToday) * 100)
         : 0;
 
+    const syncFromDB = async () => {
+        try {
+            setLoading(true);
+            const today = new Date().toISOString().split('T')[0];
+
+            // Fetch current 'Picking' orders from main table
+            const { data: pickingOrders, error: fetchError } = await supabase
+                .from('pedidos_consolidados')
+                .select('pedido_id_interno')
+                .eq('fase_atual', 'Picking');
+
+            if (fetchError) throw fetchError;
+
+            if (pickingOrders && pickingOrders.length > 0) {
+                const trackerRows = pickingOrders.map((p: any) => ({
+                    pedido_id: p.pedido_id_interno,
+                    data_referencia: today
+                }));
+
+                const { error: upsertError } = await supabase
+                    .from('daily_picking_tracker')
+                    .upsert(trackerRows, { onConflict: 'pedido_id,data_referencia', ignoreDuplicates: true });
+
+                if (upsertError) throw upsertError;
+            }
+
+            await fetchProductionData();
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="animate-fade">
-            <header className="header">
-                <h1 className="title">Produção Diária (Picking)</h1>
-                <span className="text-sm text-muted">Acompanhamento de pedidos que passaram pelo Picking hoje</span>
+            <header className="header flex justify-between items-start">
+                <div>
+                    <h1 className="title">Produção Diária (Picking)</h1>
+                    <span className="text-sm text-muted">Acompanhamento de pedidos que passaram pelo Picking hoje</span>
+                </div>
+                <button
+                    onClick={syncFromDB}
+                    className="btn btn-outline text-xs flex items-center gap-2"
+                    title="Recalcular com base nos dados atuais"
+                >
+                    <Factory size={14} /> Sincronizar Agora
+                </button>
             </header>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
