@@ -3,12 +3,11 @@ import {
     LayoutDashboard,
     Kanban,
     ListOrdered,
-    FileUp,
     Settings,
     Package,
     ChevronLeft,
     Menu,
-    Factory,
+    FileUp,
     RotateCcw
 } from 'lucide-react';
 
