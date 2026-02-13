@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 import { Search, AlertTriangle, RotateCcw } from 'lucide-react';
 import { checkPhaseSLAs, fetchRoutesFromSheet } from '../lib/utils';
@@ -17,6 +18,8 @@ export default function OrdersPage() {
     const [filterRoute, setFilterRoute] = useState('');
     const [driverFilter, setDriverFilter] = useState('');
     const [onlyMissingDelivery, setOnlyMissingDelivery] = useState(false);
+
+    const [confirmDevolucao, setConfirmDevolucao] = useState<string | null>(null);
 
     useEffect(() => {
         fetchPedidos();
@@ -70,6 +73,29 @@ export default function OrdersPage() {
         setLoading(false);
     };
 
+    const handleDevolucao = async () => {
+        if (!confirmDevolucao) return;
+
+        try {
+            const { error } = await supabase
+                .from('order_overrides')
+                .upsert({
+                    pedido_id_interno: confirmDevolucao,
+                    status_manual: 'Devolução'
+                });
+
+            if (error) throw error;
+
+            setPedidos(prev => prev.filter(p => p.pedido_id_interno !== confirmDevolucao));
+
+        } catch (e) {
+            console.error(e);
+            alert('Erro ao enviar para devolução');
+        } finally {
+            setConfirmDevolucao(null);
+        }
+    };
+
     const filtered = pedidos.filter(p => {
         const matchesSearch =
             p.pedido_id_interno?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -95,38 +121,6 @@ export default function OrdersPage() {
     const formatDate = (date: string) => {
         if (!date) return '-';
         return new Date(date).toLocaleDateString('pt-BR');
-    };
-
-    const [confirmDevolucao, setConfirmDevolucao] = useState<string | null>(null);
-
-    const handleDevolucao = async () => {
-        if (!confirmDevolucao) return;
-
-        try {
-            const { error } = await supabase
-                .from('order_overrides')
-                .upsert({
-                    pedido_id_interno: confirmDevolucao,
-                    status_manual: 'Devolução'
-                });
-
-            if (error) throw error;
-
-            // Update local state to remove or update the order
-            // We can strictly remove it if we assume "Pedidos" shouldn't show "Devolução" unless filtered?
-            // User said "esse pedido iria para a a aba Devolução". Implies it leaves here.
-            setPedidos(prev => prev.filter(p => p.pedido_id_interno !== confirmDevolucao));
-
-            // Also update consolidated table for immediate consistency if feasible, 
-            // but the override is the source of truth for Import. 
-            // We can just rely on the local state update for now.
-
-        } catch (e) {
-            console.error(e);
-            alert('Erro ao enviar para devolução');
-        } finally {
-            setConfirmDevolucao(null);
-        }
     };
 
     return (
@@ -245,17 +239,29 @@ export default function OrdersPage() {
                             const route = routesMap[personName] || '-';
 
                             return (
-                                <tr key={p.id}>
-                                    <td
-                                        style={{ fontWeight: 600 }}
-                                    >
+                                <tr key={p.id} className="group relative">
+                                    <td style={{ fontWeight: 600 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                             {p.pedido_id_interno}
                                             <button
-                                                className="btn-icon"
+                                                className="btn-icon opacity-0 group-hover:opacity-100 transition-opacity"
                                                 title="Devolução"
-                                                onClick={(e) => { e.stopPropagation(); setConfirmDevolucao(p.pedido_id_interno); }}
-                                                style={{ padding: '2px', height: 'auto', color: 'var(--text-muted)' }}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    setConfirmDevolucao(p.pedido_id_interno);
+                                                }}
+                                                style={{
+                                                    padding: '4px',
+                                                    height: 'auto',
+                                                    color: 'var(--text-muted)',
+                                                    background: 'transparent',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }}
                                             >
                                                 <RotateCcw size={14} />
                                             </button>
@@ -322,7 +328,7 @@ export default function OrdersPage() {
                         {filtered.length === 0 && !loading && (
                             <tr>
                                 <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                                    Nenhuma pedido encontrada.
+                                    Nenhum pedido encontrado.
                                 </td>
                             </tr>
                         )}
@@ -337,27 +343,33 @@ export default function OrdersPage() {
                 />
             )}
 
-            {confirmDevolucao && (
+            {confirmDevolucao && createPortal(
                 <div style={{
                     position: 'fixed',
                     top: 0, left: 0, right: 0, bottom: 0,
                     background: 'rgba(0,0,0,0.8)',
-                    zIndex: 2000,
+                    zIndex: 9999,
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
-                }}>
-                    <div className="stat-card" style={{ maxWidth: '400px' }}>
-                        <h3>Enviar para Devolução?</h3>
-                        <p style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>
+                    justifyContent: 'center',
+                    backdropFilter: 'blur(4px)'
+                }} onClick={() => setConfirmDevolucao(null)}>
+                    <div
+                        className="stat-card"
+                        style={{ maxWidth: '400px', width: '100%', margin: '1rem' }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h3 className="text-lg font-semibold mb-2">Enviar para Devolução?</h3>
+                        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
                             Deseja confirmar o envio do pedido <strong>{confirmDevolucao}</strong> para a aba de Devolução?
                         </p>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                             <button className="btn btn-outline" onClick={() => setConfirmDevolucao(null)}>Cancelar</button>
                             <button className="btn btn-primary" onClick={handleDevolucao}>Sim, Confirmar</button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

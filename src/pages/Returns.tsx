@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Search, Truck, XCircle } from 'lucide-react';
-import { fetchRoutesFromSheet } from '../lib/utils';
+import { Search, AlertTriangle } from 'lucide-react';
+import { checkPhaseSLAs, fetchRoutesFromSheet } from '../lib/utils';
 import OrderDetails from '../components/OrderDetails';
 
 export default function ReturnsPage() {
@@ -10,12 +10,22 @@ export default function ReturnsPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
     const [routesMap, setRoutesMap] = useState<Record<string, string>>({});
-    const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [slaParams, setSlaParams] = useState<any>(null);
+    const [holidays, setHolidays] = useState<string[]>([]);
+    const [updating, setUpdating] = useState<string | null>(null);
 
     useEffect(() => {
         fetchReturns();
+        fetchHolidays();
         fetchRoutes();
+        const savedParams = localStorage.getItem('sla_phase_params');
+        if (savedParams) setSlaParams(JSON.parse(savedParams));
     }, []);
+
+    const fetchHolidays = async () => {
+        const { data } = await supabase.from('feriados').select('data');
+        if (data) setHolidays(data.map(h => h.data));
+    };
 
     const fetchRoutes = async () => {
         const map = await fetchRoutesFromSheet();
@@ -25,9 +35,6 @@ export default function ReturnsPage() {
     const fetchReturns = async () => {
         setLoading(true);
         // Fetch orders present in order_overrides with status_manual = 'Devolução'
-        // AND fetch their data from consolidated
-
-        // Since we can't do a join easily across these, we'll fetch overrides first
         const { data: overrides, error } = await supabase
             .from('order_overrides')
             .select('*')
@@ -46,6 +53,7 @@ export default function ReturnsPage() {
         }
 
         const ids = overrides.map(o => o.pedido_id_interno);
+        const overridesMap = new Map(overrides.map(o => [o.pedido_id_interno, o]));
 
         const { data: orders, error: ordersError } = await supabase
             .from('pedidos_consolidados')
@@ -57,39 +65,37 @@ export default function ReturnsPage() {
         }
 
         if (orders) {
-            // Merge override data if needed, though mostly we just need the order data
-            setPedidos(orders);
+            // Check if resolution column exists in overrides, if not it will be undefined, handling that carefully
+            const merged = orders.map(o => ({
+                ...o,
+                resolution: overridesMap.get(o.pedido_id_interno)?.resolution || null
+            }));
+            setPedidos(merged);
         }
         setLoading(false);
     };
 
-    const handleAction = async (pedidoId: string, action: 'Cancelado' | 'Reentrega') => {
-        setActionLoading(pedidoId);
+    const handleResolutionChange = async (pedidoId: string, newValue: 'Cancelado' | 'Reentrega' | null) => {
+        setUpdating(pedidoId);
         try {
-            if (action === 'Cancelado') {
-                // Update override to 'Cancelado'
-                // This means Import.tsx logic will filter it out or mark it as Cancelado
-                await supabase
-                    .from('order_overrides')
-                    .update({ status_manual: 'Cancelado' })
-                    .eq('pedido_id_interno', pedidoId);
+            // Update the resolution column
+            const { error } = await supabase
+                .from('order_overrides')
+                .update({ resolution: newValue })
+                .eq('pedido_id_interno', pedidoId);
 
-                // Optionally update local state to remove from list immediately
-                setPedidos(prev => prev.filter(p => p.pedido_id_interno !== pedidoId));
-            } else if (action === 'Reentrega') {
-                // Delete override so it falls back to spreadsheet status
-                await supabase
-                    .from('order_overrides')
-                    .delete()
-                    .eq('pedido_id_interno', pedidoId);
+            if (error) throw error;
 
-                setPedidos(prev => prev.filter(p => p.pedido_id_interno !== pedidoId));
-            }
+            // Update local state
+            setPedidos(prev => prev.map(p =>
+                p.pedido_id_interno === pedidoId ? { ...p, resolution: newValue } : p
+            ));
+
         } catch (e) {
             console.error(e);
-            alert('Erro ao processar ação');
+            alert('Erro ao atualizar resolução');
         } finally {
-            setActionLoading(null);
+            setUpdating(null);
         }
     };
 
@@ -100,6 +106,11 @@ export default function ReturnsPage() {
             p.nome_pessoa?.toLowerCase().includes(searchTerm.toLowerCase());
         return matchesSearch;
     });
+
+    const formatDate = (date: string) => {
+        if (!date) return '-';
+        return new Date(date).toLocaleDateString('pt-BR');
+    };
 
     return (
         <div className="animate-fade">
@@ -126,20 +137,63 @@ export default function ReturnsPage() {
                     <thead>
                         <tr>
                             <th>ID Interno</th>
-                            <th>Cliente</th>
+                            <th>Omni</th>
                             <th>Rota</th>
+                            <th>Cliente</th>
+                            <th>Fase Atual</th>
+                            <th>Aprovado em</th>
+                            <th>Entregue em</th>
+                            <th>Dias Úteis</th>
+                            <th>SLA</th>
                             <th>Motorista</th>
                             <th>Ação</th>
                         </tr>
                     </thead>
                     <tbody>
                         {filtered.map((p) => {
+                            const dStart = p.aprovado_at ? new Date(p.aprovado_at) : null;
+                            let dEnd = new Date();
+                            if (p.entregue_at) {
+                                dEnd = new Date(p.entregue_at);
+                            }
+
+                            let days: number | '-' = '-';
+                            if (dStart) {
+                                const s = new Date(dStart);
+                                const e = new Date(dEnd);
+                                s.setHours(0, 0, 0, 0);
+                                e.setHours(0, 0, 0, 0);
+                                days = Math.floor((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
+                            }
+
+                            const currentAlerts = checkPhaseSLAs(p, slaParams, holidays);
+                            const isLate = currentAlerts.length > 0 || p.sla_status === 'ATRASADO' || (typeof days === 'number' && days > 7);
                             const personName = p.nome_pessoa ? p.nome_pessoa.replace(/\*/g, '').trim().toUpperCase() : '';
                             const route = routesMap[personName] || '-';
+
+                            const isCancelado = p.resolution === 'Cancelado';
+                            const isReentrega = p.resolution === 'Reentrega';
 
                             return (
                                 <tr key={p.id}>
                                     <td style={{ fontWeight: 600 }}>{p.pedido_id_interno}</td>
+                                    <td>
+                                        {p.pedido_id_externo && (
+                                            <span style={{
+                                                color: '#10b981',
+                                                fontWeight: 700,
+                                                fontSize: '0.75rem',
+                                                background: 'rgba(16, 185, 129, 0.1)',
+                                                padding: '2px 6px',
+                                                borderRadius: '4px'
+                                            }}>
+                                                SIM
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td>
+                                        <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{route}</span>
+                                    </td>
                                     <td>
                                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                                             <span>{p.nome_pessoa}</span>
@@ -148,26 +202,58 @@ export default function ReturnsPage() {
                                             </span>
                                         </div>
                                     </td>
-                                    <td><span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{route}</span></td>
+                                    <td>
+                                        <span style={{
+                                            padding: '4px 8px',
+                                            borderRadius: '4px',
+                                            background: 'rgba(255,255,255,0.05)',
+                                            fontSize: '0.75rem',
+                                            border: isLate ? '1px solid var(--danger)' : 'none',
+                                            color: isLate ? 'var(--danger)' : 'inherit'
+                                        }}>
+                                            {p.fase_atual}
+                                        </span>
+                                    </td>
+                                    <td>{formatDate(p.aprovado_at)}</td>
+                                    <td>{p.entregue_at ? new Date(p.entregue_at).toLocaleDateString('pt-BR') : '-'}</td>
+                                    <td>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                            {days}
+                                            {isLate && <AlertTriangle size={12} color="var(--danger)" />}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span className={`sla-badge ${isLate ? 'late' : 'on-time'}`}>
+                                            {isLate
+                                                ? (p.fase_atual === 'Entregue'
+                                                    ? (p.entregue_at ? 'ENTREGUE COM ATRASO' : 'SEM ENTREGA')
+                                                    : 'ATRASADO')
+                                                : 'NO PRAZO'}
+                                        </span>
+                                    </td>
                                     <td>{p.motorista || p.transportadora || '-'}</td>
                                     <td>
-                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                            <button
-                                                className="btn btn-outline"
-                                                style={{ fontSize: '0.75rem', padding: '4px 8px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                                                onClick={() => handleAction(p.pedido_id_interno, 'Cancelado')}
-                                                disabled={actionLoading === p.pedido_id_interno}
-                                            >
-                                                {actionLoading === p.pedido_id_interno ? '...' : <><XCircle size={14} style={{ marginRight: 4 }} /> Cancelar</>}
-                                            </button>
-                                            <button
-                                                className="btn btn-outline"
-                                                style={{ fontSize: '0.75rem', padding: '4px 8px', color: 'var(--primary)', borderColor: 'var(--primary)' }}
-                                                onClick={() => handleAction(p.pedido_id_interno, 'Reentrega')}
-                                                disabled={actionLoading === p.pedido_id_interno}
-                                            >
-                                                {actionLoading === p.pedido_id_interno ? '...' : <><Truck size={14} style={{ marginRight: 4 }} /> Reentrega</>}
-                                            </button>
+                                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', fontSize: '0.8rem' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isCancelado}
+                                                    disabled={updating === p.pedido_id_interno}
+                                                    onChange={() => handleResolutionChange(p.pedido_id_interno, isCancelado ? null : 'Cancelado')}
+                                                    style={{ cursor: 'pointer' }}
+                                                />
+                                                <span style={{ color: isCancelado ? 'var(--danger)' : 'var(--text-muted)' }}>Cancelar</span>
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', fontSize: '0.8rem' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isReentrega}
+                                                    disabled={updating === p.pedido_id_interno}
+                                                    onChange={() => handleResolutionChange(p.pedido_id_interno, isReentrega ? null : 'Reentrega')}
+                                                    style={{ cursor: 'pointer' }}
+                                                />
+                                                <span style={{ color: isReentrega ? 'var(--primary)' : 'var(--text-muted)' }}>Reentrega</span>
+                                            </label>
                                         </div>
                                     </td>
                                 </tr>
@@ -175,7 +261,7 @@ export default function ReturnsPage() {
                         })}
                         {filtered.length === 0 && !loading && (
                             <tr>
-                                <td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                                <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                                     Nenhuma devolução encontrada.
                                 </td>
                             </tr>

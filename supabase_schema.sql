@@ -123,3 +123,15 @@ ADD COLUMN IF NOT EXISTS horas_packing FLOAT,
 ADD COLUMN IF NOT EXISTS horas_disponivel FLOAT,
 ADD COLUMN IF NOT EXISTS horas_transporte FLOAT,
 ADD COLUMN IF NOT EXISTS horas_faturado FLOAT;
+
+-- 9. Tabela de Overrides de Status (Devolução, Cancelado Manualmente, etc)
+CREATE TABLE IF NOT EXISTS order_overrides (
+    pedido_id_interno TEXT PRIMARY KEY,
+    status_manual TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- RLS for Overrides
+ALTER TABLE order_overrides ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Access Overrides" ON order_overrides FOR ALL USING (true);
+
