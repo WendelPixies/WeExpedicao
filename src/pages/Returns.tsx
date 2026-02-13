@@ -137,14 +137,11 @@ export default function ReturnsPage() {
                     <thead>
                         <tr>
                             <th>ID Interno</th>
-                            <th>Omni</th>
                             <th>Rota</th>
                             <th>Cliente</th>
                             <th>Fase Atual</th>
                             <th>Aprovado em</th>
-                            <th>Entregue em</th>
                             <th>Dias Úteis</th>
-                            <th>SLA</th>
                             <th>Motorista</th>
                             <th>Ação</th>
                         </tr>
@@ -178,20 +175,6 @@ export default function ReturnsPage() {
                                 <tr key={p.id}>
                                     <td style={{ fontWeight: 600 }}>{p.pedido_id_interno}</td>
                                     <td>
-                                        {p.pedido_id_externo && (
-                                            <span style={{
-                                                color: '#10b981',
-                                                fontWeight: 700,
-                                                fontSize: '0.75rem',
-                                                background: 'rgba(16, 185, 129, 0.1)',
-                                                padding: '2px 6px',
-                                                borderRadius: '4px'
-                                            }}>
-                                                SIM
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td>
                                         <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{route}</span>
                                     </td>
                                     <td>
@@ -215,21 +198,11 @@ export default function ReturnsPage() {
                                         </span>
                                     </td>
                                     <td>{formatDate(p.aprovado_at)}</td>
-                                    <td>{p.entregue_at ? new Date(p.entregue_at).toLocaleDateString('pt-BR') : '-'}</td>
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                                             {days}
                                             {isLate && <AlertTriangle size={12} color="var(--danger)" />}
                                         </div>
-                                    </td>
-                                    <td>
-                                        <span className={`sla-badge ${isLate ? 'late' : 'on-time'}`}>
-                                            {isLate
-                                                ? (p.fase_atual === 'Entregue'
-                                                    ? (p.entregue_at ? 'ENTREGUE COM ATRASO' : 'SEM ENTREGA')
-                                                    : 'ATRASADO')
-                                                : 'NO PRAZO'}
-                                        </span>
                                     </td>
                                     <td>{p.motorista || p.transportadora || '-'}</td>
                                     <td>
