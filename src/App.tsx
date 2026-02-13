@@ -6,7 +6,7 @@ import Kanban from './pages/Kanban';
 import OrdersPage from './pages/Orders';
 import ImportPage from './pages/Import';
 import Settings from './pages/Settings';
-import Production from './pages/Production';
+import ReturnsPage from './pages/Returns';
 
 function App() {
   const [collapsed, setCollapsed] = useState(false);
@@ -19,7 +19,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/kanban" element={<Kanban />} />
           <Route path="/pedidos" element={<OrdersPage />} />
-          <Route path="/producao" element={<Production />} />
+          <Route path="/devolucao" element={<ReturnsPage />} />
           <Route path="/importar" element={<ImportPage />} />
           <Route path="/configuracoes" element={<Settings />} />
         </Routes>

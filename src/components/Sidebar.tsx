@@ -8,7 +8,8 @@ import {
     Package,
     ChevronLeft,
     Menu,
-    Factory
+    Factory,
+    RotateCcw
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -21,7 +22,7 @@ export default function Sidebar({ collapsed, toggleCollapse }: SidebarProps) {
         { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
         { to: '/kanban', icon: Kanban, label: 'Kanban' },
         { to: '/pedidos', icon: ListOrdered, label: 'Pedidos' },
-        { to: '/producao', icon: Factory, label: 'Produção' },
+        { to: '/devolucao', icon: RotateCcw, label: 'Devolução' },
         { to: '/importar', icon: FileUp, label: 'Importar' },
         { to: '/configuracoes', icon: Settings, label: 'Configurações' },
     ];

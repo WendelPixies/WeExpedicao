@@ -12,7 +12,7 @@ import {
     Calendar,
     Users
 } from 'lucide-react';
-import { checkPhaseSLAs } from '../lib/utils';
+import { checkPhaseSLAs, calculateBusinessDays } from '../lib/utils';
 
 export default function Dashboard() {
     const [stats, setStats] = useState<any>(null);
@@ -144,6 +144,27 @@ export default function Dashboard() {
             return days > 7;
         }).length;
 
+        // SLA DAYS DISTRIBUTION
+        const slaDistribution: Record<string, number> = {
+            '1': 0, '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0, '>7': 0
+        };
+
+        globalDelivered.forEach(p => {
+            if (p.aprovado_at && p.entregue_at) {
+                const days = calculateBusinessDays(new Date(p.aprovado_at), new Date(p.entregue_at), holidays);
+                if (days >= 1 && days <= 7) {
+                    slaDistribution[String(days)]++;
+                } else if (days > 7) {
+                    slaDistribution['>7']++;
+                } else {
+                    // For 0 days (same day delivery), count as 1 or separate? 
+                    // Usually same day is < 1, let's include in 1 for now or separate based on request. 
+                    // Request has 1 to 7. Let's put 0 in 1.
+                    slaDistribution['1']++;
+                }
+            }
+        });
+
         const peakDay = Object.entries(deliveryDates).reduce((a, b) => a[1] > b[1] ? a : b, ['', 0]);
 
         setStats({
@@ -160,7 +181,8 @@ export default function Dashboard() {
                 rate: (s.onTime + s.late) > 0 ? ((s.onTime / (s.onTime + s.late)) * 100).toFixed(1) : '0.0'
             })).sort((a, b) => b.total - a.total), // Sort by total volume
             peakDay: peakDay[0] || '-',
-            peakCount: peakDay[1] || 0
+            peakCount: peakDay[1] || 0,
+            slaDistribution
         });
         setLoading(false);
     };
@@ -262,34 +284,68 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            <div className="stat-card" style={{ marginBottom: '2rem' }}>
-                <h3 className="stat-label" style={{ marginBottom: '1.5rem' }}>Proporção Global de Entregas</h3>
-                <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <ResponsiveContainer width="100%" height={250}>
-                        <PieChart>
-                            <Pie
-                                data={[
-                                    { name: 'No Prazo', value: stats.globalDeliveredOnTime },
-                                    { name: 'Atrasado', value: stats.globalDeliveredLate }
-                                ]}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={70}
-                                outerRadius={90}
-                                paddingAngle={8}
-                                dataKey="value"
-                            >
-                                <Cell fill="var(--success)" />
-                                <Cell fill="var(--danger)" />
-                            </Pie>
-                            <Tooltip
-                                contentStyle={{ background: '#0f172a', border: '1px solid var(--border)', borderRadius: '8px' }}
-                            />
-                            <Legend verticalAlign="bottom" height={36} />
-                        </PieChart>
-                    </ResponsiveContainer>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+                <div className="stat-card" style={{ minHeight: '300px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                        <CheckCircle2 size={18} color="var(--primary)" />
+                        <h3 className="stat-label" style={{ margin: 0 }}>SLA de Entrega (Dias Úteis)</h3>
+                    </div>
+                    <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                                <th style={{ textAlign: 'left', padding: '0.5rem 0', color: 'var(--text-muted)' }}>Dias Úteis</th>
+                                <th style={{ textAlign: 'right', padding: '0.5rem 0', color: 'var(--text-muted)' }}>Qtd</th>
+                                <th style={{ textAlign: 'right', padding: '0.5rem 0', color: 'var(--text-muted)' }}>Percentual</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {['1', '2', '3', '4', '5', '6', '7', '>7'].map(day => {
+                                const count = stats.slaDistribution[day] || 0;
+                                const total = stats.globalDeliveredTotal || 1; // Avoid div by 0
+                                const percent = ((count / total) * 100).toFixed(2);
+                                return (
+                                    <tr key={day} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                                        <td style={{ padding: '0.5rem 0', fontWeight: 600 }}>{day === '>7' ? 'Acima de 7' : day}</td>
+                                        <td style={{ textAlign: 'right', padding: '0.5rem 0' }}>{count}</td>
+                                        <td style={{ textAlign: 'right', padding: '0.5rem 0' }}>{percent}%</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="stat-card" style={{ minHeight: '300px' }}>
+                    <h3 className="stat-label" style={{ marginBottom: '1.5rem' }}>Proporção Global de Entregas</h3>
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <ResponsiveContainer width="100%" height={250}>
+                            <PieChart>
+                                <Pie
+                                    data={[
+                                        { name: 'No Prazo', value: stats.globalDeliveredOnTime },
+                                        { name: 'Atrasado', value: stats.globalDeliveredLate }
+                                    ]}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={70}
+                                    outerRadius={90}
+                                    paddingAngle={8}
+                                    dataKey="value"
+                                >
+                                    <Cell fill="var(--success)" />
+                                    <Cell fill="var(--danger)" />
+                                </Pie>
+                                <Tooltip
+                                    contentStyle={{ background: '#0f172a', border: '1px solid var(--border)', borderRadius: '8px' }}
+                                />
+                                <Legend verticalAlign="bottom" height={36} />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
             </div>
+
+
         </div>
     );
 }

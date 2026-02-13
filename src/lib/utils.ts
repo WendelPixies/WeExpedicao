@@ -291,3 +291,33 @@ export const calculateBusinessHours = (start: string | null, end: string | null 
 };
 
 
+
+export const fetchRoutesFromSheet = async (): Promise<Record<string, string>> => {
+    try {
+        const response = await fetch('https://docs.google.com/spreadsheets/d/1dTljUAvscAY-PpaiCkGnUK_ikgcB0S2Xzi2cK8I-GJM/export?format=csv&gid=0');
+        const text = await response.text();
+        const lines = text.split('\n');
+        const map: Record<string, string> = {};
+
+        // Skip header (index 0)
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line) continue;
+
+            const cols = line.split(',');
+            if (cols.length >= 5) {
+                const rawName = cols[1];
+                const rawRota = cols[4];
+
+                if (rawName && rawRota) {
+                    const normalizedName = rawName.replace(/\*/g, '').trim().toUpperCase();
+                    map[normalizedName] = rawRota.trim();
+                }
+            }
+        }
+        return map;
+    } catch (e) {
+        console.error("Error fetching routes:", e);
+        return {};
+    }
+};

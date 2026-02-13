@@ -119,6 +119,13 @@ export default function ImportPage() {
             const holidays = (holidaysData || []).map(h => h.data);
             const slaMax = Number(localStorage.getItem('sla_max_dias_uteis') || '5');
 
+            // 4.1 Fetch Order Overrides
+            const { data: overridesData } = await supabase.from('order_overrides').select('pedido_id_interno, status_manual');
+            const overridesMap = new Map<string, string>();
+            if (overridesData) {
+                overridesData.forEach(o => overridesMap.set(o.pedido_id_interno, o.status_manual));
+            }
+
             // 5. Save Raw Data
             if (xlsxRows.length) {
                 await supabase.from('raw_xlsx').insert(xlsxRows.map(row => ({ import_id: importRec.id, data: row })));
@@ -188,7 +195,13 @@ export default function ImportPage() {
                 const faturadoAtRaw = getVal(rx, ['DataFaturamento', 'Data Faturamento', 'Data de Faturamento']);
                 const disponivelAtRaw = getVal(rx, ['DataAutorizaçãoFaturamento', 'Data Autorização Faturamento', 'Data de Autorização Faturamento', 'DataAutorização']);
 
-                const phase = determinePhase(rx, match);
+                let phase = determinePhase(rx, match);
+
+                // CHECK OVERRIDE
+                if (codPedido && overridesMap.has(String(codPedido))) {
+                    console.log(`ℹ️ Pedido ${codPedido} possui override: ${overridesMap.get(String(codPedido))}`);
+                    phase = overridesMap.get(String(codPedido)) as any;
+                }
                 // Parse dates first
                 const aprovadoAt = aprovadoAtRaw ? new Date(aprovadoAtRaw) : null;
                 const disponivelAt = parseExcelDate(disponivelAtRaw);

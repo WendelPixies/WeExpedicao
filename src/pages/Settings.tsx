@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Calendar, Plus, Trash2, Save, RefreshCw } from 'lucide-react';
+import { Calendar, Plus, Trash2, Save, RefreshCw, DollarSign } from 'lucide-react';
+import { fetchRoutesFromSheet } from '../lib/utils';
 
 export default function Settings() {
     const [holidays, setHolidays] = useState<any[]>([]);
@@ -14,9 +15,12 @@ export default function Settings() {
         sla_despachado: 96,
         sla_entregue: 120
     });
+    const [routes, setRoutes] = useState<string[]>([]);
+    const [routeCosts, setRouteCosts] = useState<Record<string, number>>({});
 
     useEffect(() => {
         fetchHolidays();
+        loadRouteData();
         const savedSla = localStorage.getItem('sla_max_dias_uteis');
         if (savedSla) setSlaMax(Number(savedSla));
 
@@ -43,6 +47,37 @@ export default function Settings() {
     const handleDeleteHoliday = async (id: string) => {
         const { error } = await supabase.from('feriados').delete().eq('id', id);
         if (!error) fetchHolidays();
+    };
+
+    const loadRouteData = async () => {
+        const map = await fetchRoutesFromSheet();
+        const uniqueRoutes = Array.from(new Set(Object.values(map))).sort();
+        setRoutes(uniqueRoutes);
+
+        const { data } = await supabase.from('route_costs').select('*');
+        if (data) {
+            const costs: Record<string, number> = {};
+            data.forEach((r: any) => {
+                costs[r.route] = r.cost;
+            });
+            setRouteCosts(costs);
+        }
+    };
+
+    const saveRouteCosts = async () => {
+        const updates = Object.entries(routeCosts).map(([route, cost]) => ({
+            route,
+            cost,
+            updated_at: new Date()
+        }));
+
+        const { error } = await supabase.from('route_costs').upsert(updates);
+        if (error) {
+            console.error('Error saving costs:', error);
+            alert('Erro ao salvar custos das rotas. Verifique se a tabela route_costs foi criada.');
+        } else {
+            alert('Custos das rotas salvos com sucesso!');
+        }
     };
 
     const saveSettings = () => {
@@ -175,6 +210,37 @@ export default function Settings() {
                             </tbody>
                         </table>
                     </div>
+                </section>
+            </div>
+
+            <div style={{ marginTop: '2rem' }}>
+                <section className="stat-card">
+                    <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <DollarSign size={20} color="var(--primary)" />
+                        Custos de Entrega por Rota
+                    </h2>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
+                        {routes.map(route => (
+                            <div key={route}>
+                                <label className="stat-label" style={{ fontSize: '0.75rem' }}>Rota {route}</label>
+                                <div style={{ position: 'relative', marginTop: '0.25rem' }}>
+                                    <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>R$</span>
+                                    <input
+                                        type="number"
+                                        className="input"
+                                        style={{ paddingLeft: '2rem' }}
+                                        value={routeCosts[route] || ''}
+                                        onChange={(e) => setRouteCosts({ ...routeCosts, [route]: Number(e.target.value) })}
+                                        placeholder="0,00"
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <button className="btn btn-primary" style={{ marginTop: '1.5rem', width: '200px' }} onClick={saveRouteCosts}>
+                        <Save size={18} style={{ marginRight: '0.5rem' }} /> Salvar Custos
+                    </button>
                 </section>
             </div>
 

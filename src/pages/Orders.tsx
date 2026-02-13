@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Search, AlertTriangle } from 'lucide-react';
-import { checkPhaseSLAs } from '../lib/utils';
+import { Search, AlertTriangle, RotateCcw } from 'lucide-react';
+import { checkPhaseSLAs, fetchRoutesFromSheet } from '../lib/utils';
 import OrderDetails from '../components/OrderDetails';
 
 export default function OrdersPage() {
@@ -32,32 +32,8 @@ export default function OrdersPage() {
     };
 
     const fetchRoutes = async () => {
-        try {
-            const response = await fetch('https://docs.google.com/spreadsheets/d/1dTljUAvscAY-PpaiCkGnUK_ikgcB0S2Xzi2cK8I-GJM/export?format=csv&gid=0');
-            const text = await response.text();
-            const lines = text.split('\n');
-            const map: Record<string, string> = {};
-
-            // Skip header (index 0)
-            for (let i = 1; i < lines.length; i++) {
-                const line = lines[i];
-                if (!line) continue;
-
-                const cols = line.split(',');
-                if (cols.length >= 5) {
-                    const rawName = cols[1];
-                    const rawRota = cols[4];
-
-                    if (rawName && rawRota) {
-                        const normalizedName = rawName.replace(/\*/g, '').trim().toUpperCase();
-                        map[normalizedName] = rawRota.trim();
-                    }
-                }
-            }
-            setRoutesMap(map);
-        } catch (e) {
-            console.error("Error fetching routes:", e);
-        }
+        const map = await fetchRoutesFromSheet();
+        setRoutesMap(map);
     };
 
     const fetchPedidos = async () => {
@@ -119,6 +95,38 @@ export default function OrdersPage() {
     const formatDate = (date: string) => {
         if (!date) return '-';
         return new Date(date).toLocaleDateString('pt-BR');
+    };
+
+    const [confirmDevolucao, setConfirmDevolucao] = useState<string | null>(null);
+
+    const handleDevolucao = async () => {
+        if (!confirmDevolucao) return;
+
+        try {
+            const { error } = await supabase
+                .from('order_overrides')
+                .upsert({
+                    pedido_id_interno: confirmDevolucao,
+                    status_manual: 'Devolução'
+                });
+
+            if (error) throw error;
+
+            // Update local state to remove or update the order
+            // We can strictly remove it if we assume "Pedidos" shouldn't show "Devolução" unless filtered?
+            // User said "esse pedido iria para a a aba Devolução". Implies it leaves here.
+            setPedidos(prev => prev.filter(p => p.pedido_id_interno !== confirmDevolucao));
+
+            // Also update consolidated table for immediate consistency if feasible, 
+            // but the override is the source of truth for Import. 
+            // We can just rely on the local state update for now.
+
+        } catch (e) {
+            console.error(e);
+            alert('Erro ao enviar para devolução');
+        } finally {
+            setConfirmDevolucao(null);
+        }
     };
 
     return (
@@ -241,7 +249,17 @@ export default function OrdersPage() {
                                     <td
                                         style={{ fontWeight: 600 }}
                                     >
-                                        {p.pedido_id_interno}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            {p.pedido_id_interno}
+                                            <button
+                                                className="btn-icon"
+                                                title="Devolução"
+                                                onClick={(e) => { e.stopPropagation(); setConfirmDevolucao(p.pedido_id_interno); }}
+                                                style={{ padding: '2px', height: 'auto', color: 'var(--text-muted)' }}
+                                            >
+                                                <RotateCcw size={14} />
+                                            </button>
+                                        </div>
                                     </td>
                                     <td>
                                         {p.pedido_id_externo && (
@@ -304,7 +322,7 @@ export default function OrdersPage() {
                         {filtered.length === 0 && !loading && (
                             <tr>
                                 <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                                    Nenhum pedido encontrado.
+                                    Nenhuma pedido encontrada.
                                 </td>
                             </tr>
                         )}
@@ -317,6 +335,29 @@ export default function OrdersPage() {
                     order={selectedOrder}
                     onClose={() => setSelectedOrder(null)}
                 />
+            )}
+
+            {confirmDevolucao && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.8)',
+                    zIndex: 2000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>
+                    <div className="stat-card" style={{ maxWidth: '400px' }}>
+                        <h3>Enviar para Devolução?</h3>
+                        <p style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>
+                            Deseja confirmar o envio do pedido <strong>{confirmDevolucao}</strong> para a aba de Devolução?
+                        </p>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1.5rem' }}>
+                            <button className="btn btn-outline" onClick={() => setConfirmDevolucao(null)}>Cancelar</button>
+                            <button className="btn btn-primary" onClick={handleDevolucao}>Sim, Confirmar</button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
