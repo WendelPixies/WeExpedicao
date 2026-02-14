@@ -20,6 +20,7 @@ export default function OrdersPage() {
     const [onlyMissingDelivery, setOnlyMissingDelivery] = useState(false);
 
     const [confirmDevolucao, setConfirmDevolucao] = useState<string | null>(null);
+    const [returnReason, setReturnReason] = useState('');
 
     useEffect(() => {
         fetchPedidos();
@@ -74,14 +75,15 @@ export default function OrdersPage() {
     };
 
     const handleDevolucao = async () => {
-        if (!confirmDevolucao) return;
+        if (!confirmDevolucao || !returnReason) return;
 
         try {
             const { error } = await supabase
                 .from('order_overrides')
                 .upsert({
                     pedido_id_interno: confirmDevolucao,
-                    status_manual: 'Devolução'
+                    status_manual: 'Devolução',
+                    reason: returnReason
                 });
 
             if (error) throw error;
@@ -93,6 +95,7 @@ export default function OrdersPage() {
             alert('Erro ao enviar para devolução');
         } finally {
             setConfirmDevolucao(null);
+            setReturnReason('');
         }
     };
 
@@ -353,19 +356,52 @@ export default function OrdersPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     backdropFilter: 'blur(4px)'
-                }} onClick={() => setConfirmDevolucao(null)}>
+                }} onClick={() => {
+                    setConfirmDevolucao(null);
+                    setReturnReason('');
+                }}>
                     <div
                         className="stat-card"
                         style={{ maxWidth: '400px', width: '100%', margin: '1rem' }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         <h3 className="text-lg font-semibold mb-2">Enviar para Devolução?</h3>
-                        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+                        <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
                             Deseja confirmar o envio do pedido <strong>{confirmDevolucao}</strong> para a aba de Devolução?
                         </p>
+
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Motivo:</label>
+                            <select
+                                className="input"
+                                style={{ width: '100%' }}
+                                value={returnReason}
+                                onChange={(e) => setReturnReason(e.target.value)}
+                            >
+                                <option value="">Selecione um motivo...</option>
+                                <option value="Não fez o pedido">Não fez o pedido</option>
+                                <option value="Endereço não localizado">Endereço não localizado</option>
+                                <option value="Endereço Insuficiente">Endereço Insuficiente</option>
+                                <option value="Destinatário ausente">Destinatário ausente</option>
+                                <option value="Destinatário desconhecido">Destinatário desconhecido</option>
+                                <option value="Destinatário faleceu">Destinatário faleceu</option>
+                                <option value="Destinatário mudou de endereço">Destinatário mudou de endereço</option>
+                                <option value="Não quer mais o pedido">Não quer mais o pedido</option>
+                            </select>
+                        </div>
+
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                            <button className="btn btn-outline" onClick={() => setConfirmDevolucao(null)}>Cancelar</button>
-                            <button className="btn btn-primary" onClick={handleDevolucao}>Sim, Confirmar</button>
+                            <button className="btn btn-outline" onClick={() => {
+                                setConfirmDevolucao(null);
+                                setReturnReason('');
+                            }}>Cancelar</button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleDevolucao}
+                                disabled={!returnReason}
+                            >
+                                Sim, Confirmar
+                            </button>
                         </div>
                     </div>
                 </div>,

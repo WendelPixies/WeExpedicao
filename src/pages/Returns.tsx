@@ -68,7 +68,8 @@ export default function ReturnsPage() {
             // Check if resolution column exists in overrides, if not it will be undefined, handling that carefully
             const merged = orders.map(o => ({
                 ...o,
-                resolution: overridesMap.get(o.pedido_id_interno)?.resolution || null
+                resolution: overridesMap.get(o.pedido_id_interno)?.resolution || null,
+                reason: overridesMap.get(o.pedido_id_interno)?.reason || null
             }));
             setPedidos(merged);
         }
@@ -140,6 +141,7 @@ export default function ReturnsPage() {
                             <th>Rota</th>
                             <th>Cliente</th>
                             <th>Fase Atual</th>
+                            <th>Motivo</th>
                             <th>Aprovado em</th>
                             <th>Dias Úteis</th>
                             <th>Motorista</th>
@@ -197,6 +199,11 @@ export default function ReturnsPage() {
                                             {p.fase_atual}
                                         </span>
                                     </td>
+                                    <td>
+                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                            {p.reason || '-'}
+                                        </span>
+                                    </td>
                                     <td>{formatDate(p.aprovado_at)}</td>
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -234,7 +241,7 @@ export default function ReturnsPage() {
                         })}
                         {filtered.length === 0 && !loading && (
                             <tr>
-                                <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                                <td colSpan={12} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                                     Nenhuma devolução encontrada.
                                 </td>
                             </tr>
