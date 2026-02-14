@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Search, MapPin, ExternalLink, Clock, AlertTriangle, Calendar, CheckCircle, Route } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { checkPhaseSLAs } from '../lib/utils';
+import { checkPhaseSLAs, fetchRoutesFromSheet } from '../lib/utils';
 
 const PHASES = ['Aprovado', 'Picking', 'Packing', 'Disponível para faturamento', 'Transporte', 'Entregue'];
 
@@ -33,35 +33,8 @@ export default function Kanban() {
     };
 
     const fetchRoutes = async () => {
-        try {
-            const response = await fetch('https://docs.google.com/spreadsheets/d/1dTljUAvscAY-PpaiCkGnUK_ikgcB0S2Xzi2cK8I-GJM/export?format=csv&gid=0');
-            const text = await response.text();
-            const lines = text.split('\n');
-            const map: Record<string, string> = {};
-
-            // Skip header (index 0)
-            for (let i = 1; i < lines.length; i++) {
-                const line = lines[i];
-                if (!line) continue;
-
-                // Simple CSV split (works for this specific dataset which doesn't seem to have commas in fields)
-                const cols = line.split(',');
-                if (cols.length >= 5) {
-                    // Column 1 is Name, Column 4 is Rota
-                    const rawName = cols[1];
-                    const rawRota = cols[4];
-
-                    if (rawName && rawRota) {
-                        // Normalize name: remove * and trim
-                        const normalizedName = rawName.replace(/\*/g, '').trim().toUpperCase();
-                        map[normalizedName] = rawRota.trim();
-                    }
-                }
-            }
-            setRoutesMap(map);
-        } catch (e) {
-            console.error("Error fetching routes:", e);
-        }
+        const map = await fetchRoutesFromSheet();
+        setRoutesMap(map);
     };
 
     const fetchPedidos = async () => {

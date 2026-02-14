@@ -12,7 +12,7 @@ import {
     Calendar,
     Users
 } from 'lucide-react';
-import { checkPhaseSLAs, calculateBusinessDays } from '../lib/utils';
+import { checkPhaseSLAs, calculateBusinessDays, fetchRoutesFromSheet } from '../lib/utils';
 
 export default function Dashboard() {
     const [stats, setStats] = useState<any>(null);
@@ -28,30 +28,9 @@ export default function Dashboard() {
     }, []);
 
     const fetchRoutes = async () => {
-        try {
-            const response = await fetch('https://docs.google.com/spreadsheets/d/1dTljUAvscAY-PpaiCkGnUK_ikgcB0S2Xzi2cK8I-GJM/export?format=csv&gid=0');
-            const text = await response.text();
-            const lines = text.split('\n');
-            const map: Record<string, string> = {};
-            for (let i = 1; i < lines.length; i++) {
-                const line = lines[i];
-                if (!line) continue;
-                const cols = line.split(',');
-                if (cols.length >= 5) {
-                    const rawName = cols[1];
-                    const rawRota = cols[4];
-                    if (rawName && rawRota) {
-                        const normalizedName = rawName.replace(/\*/g, '').trim().toUpperCase();
-                        map[normalizedName] = rawRota.trim();
-                    }
-                }
-            }
-            setRoutesMap(map);
-            return map;
-        } catch (e) {
-            console.error("Error fetching routes:", e);
-            return {};
-        }
+        const map = await fetchRoutesFromSheet();
+        setRoutesMap(map);
+        return map;
     };
 
     const fetchStats = async (rMap: Record<string, string> = routesMap) => {
