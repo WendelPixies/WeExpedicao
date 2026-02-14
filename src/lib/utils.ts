@@ -292,6 +292,17 @@ export const calculateBusinessHours = (start: string | null, end: string | null 
 
 
 
+const EXCLUDED_ROUTES = [
+    'CAMPOS DOS GOYTACAZES',
+    'CARAPEBUS',
+    '#N/A',
+    'E.A.MACHA"',
+    'MACAÉ',
+    'SÃO JOÃO DA BARRA',
+    'TOCOS',
+    'TRAVESSÃO'
+];
+
 export const fetchRoutesFromSheet = async (): Promise<Record<string, string>> => {
     try {
         const response = await fetch('https://docs.google.com/spreadsheets/d/1dTljUAvscAY-PpaiCkGnUK_ikgcB0S2Xzi2cK8I-GJM/export?format=csv&gid=0');
@@ -311,7 +322,11 @@ export const fetchRoutesFromSheet = async (): Promise<Record<string, string>> =>
 
                 if (rawName && rawRota) {
                     const normalizedName = rawName.replace(/\*/g, '').trim().toUpperCase();
-                    map[normalizedName] = rawRota.trim();
+                    const normalizedRota = rawRota.trim();
+
+                    if (!EXCLUDED_ROUTES.includes(normalizedRota)) {
+                        map[normalizedName] = normalizedRota;
+                    }
                 }
             }
         }
