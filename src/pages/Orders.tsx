@@ -21,14 +21,23 @@ export default function OrdersPage() {
 
     const [confirmDevolucao, setConfirmDevolucao] = useState<string | null>(null);
     const [returnReason, setReturnReason] = useState('');
+    const [overriddenIds, setOverriddenIds] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         fetchPedidos();
         fetchHolidays();
         fetchRoutes();
+        fetchOverrides();
         const savedParams = localStorage.getItem('sla_phase_params');
         if (savedParams) setSlaParams(JSON.parse(savedParams));
     }, []);
+
+    const fetchOverrides = async () => {
+        const { data } = await supabase.from('order_overrides').select('pedido_id_interno');
+        if (data) {
+            setOverriddenIds(new Set(data.map(o => o.pedido_id_interno)));
+        }
+    };
 
     const fetchHolidays = async () => {
         const { data } = await supabase.from('feriados').select('data');
@@ -89,6 +98,7 @@ export default function OrdersPage() {
             if (error) throw error;
 
             setPedidos(prev => prev.filter(p => p.pedido_id_interno !== confirmDevolucao));
+            setOverriddenIds(prev => new Set(prev).add(confirmDevolucao));
 
         } catch (e) {
             console.error(e);
@@ -100,6 +110,8 @@ export default function OrdersPage() {
     };
 
     const filtered = pedidos.filter(p => {
+        if (overriddenIds.has(p.pedido_id_interno)) return false;
+
         const matchesSearch =
             p.pedido_id_interno?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             p.pedido_id_externo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
