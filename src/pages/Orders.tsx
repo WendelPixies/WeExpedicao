@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 import { Search, AlertTriangle, RotateCcw } from 'lucide-react';
-import { checkPhaseSLAs, fetchRoutesFromSheet } from '../lib/utils';
+import { checkPhaseSLAs, fetchRoutesFromSheet, calculateBusinessDays } from '../lib/utils';
 import OrderDetails from '../components/OrderDetails';
 
 export default function OrdersPage() {
@@ -237,19 +237,15 @@ export default function OrdersPage() {
                     </thead>
                     <tbody>
                         {filtered.map((p) => {
-                            const dStart = p.aprovado_at ? new Date(p.aprovado_at) : null;
-                            let dEnd = new Date();
-                            if (p.entregue_at) {
-                                dEnd = new Date(p.entregue_at);
-                            }
 
-                            let days: number | '-' = '-';
-                            if (dStart) {
-                                const s = new Date(dStart);
-                                const e = new Date(dEnd);
-                                s.setHours(0, 0, 0, 0);
-                                e.setHours(0, 0, 0, 0);
-                                days = Math.floor((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
+
+                            // Calculate business days dynamically on frontend to fix 0/null issues from DB
+                            // We use the same holidays list loaded in state
+                            let businessDays = 0;
+                            if (p.entregue_at) {
+                                businessDays = calculateBusinessDays(p.aprovado_at, p.entregue_at, holidays);
+                            } else if (p.aprovado_at) {
+                                businessDays = calculateBusinessDays(p.aprovado_at, new Date(), holidays);
                             }
 
                             const currentAlerts = checkPhaseSLAs(p, slaParams, holidays);
@@ -258,10 +254,10 @@ export default function OrdersPage() {
                             // SE JÁ ENTREGUE: Ignora alertas de fases intermediárias. 
                             // O status final "Entregue com Atraso" deve ser puramente baseada no SLA total.
                             if (p.fase_atual === 'Entregue') {
-                                isLate = typeof p.dias_uteis_desde_aprovacao === 'number' && p.dias_uteis_desde_aprovacao > slaMax;
+                                isLate = businessDays > slaMax;
                             } else {
                                 // SE EM ANDAMENTO: Considera atrasos nas fases (ex: atraso no picking)
-                                isLate = currentAlerts.length > 0 || (typeof p.dias_uteis_desde_aprovacao === 'number' && p.dias_uteis_desde_aprovacao > slaMax);
+                                isLate = currentAlerts.length > 0 || businessDays > slaMax;
                             }
 
                             const personName = p.nome_pessoa ? p.nome_pessoa.replace(/\*/g, '').trim().toUpperCase() : '';
@@ -337,8 +333,8 @@ export default function OrdersPage() {
                                     <td>{p.entregue_at ? new Date(p.entregue_at).toLocaleDateString('pt-BR') : '-'}</td>
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                            {/* Mostra dias úteis reais do banco de dados se disponível, senão usa o calculo de dias corridos como fallback visual (com aviso) */}
-                                            {typeof p.dias_uteis_desde_aprovacao === 'number' ? p.dias_uteis_desde_aprovacao : days}
+                                            {/* Usa o cálculo dinâmico do frontend */}
+                                            {businessDays}
                                             {isLate && <AlertTriangle size={12} color="var(--danger)" />}
                                         </div>
                                     </td>
