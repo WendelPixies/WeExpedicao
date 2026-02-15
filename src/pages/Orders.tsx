@@ -253,8 +253,17 @@ export default function OrdersPage() {
                             }
 
                             const currentAlerts = checkPhaseSLAs(p, slaParams, holidays);
-                            // Use dynamic SLA max from settings, ignoring the potentially stale p.sla_status from DB
-                            const isLate = currentAlerts.length > 0 || (typeof p.dias_uteis_desde_aprovacao === 'number' && p.dias_uteis_desde_aprovacao > slaMax);
+                            let isLate = false;
+
+                            // SE JÁ ENTREGUE: Ignora alertas de fases intermediárias. 
+                            // O status final "Entregue com Atraso" deve ser puramente baseada no SLA total.
+                            if (p.fase_atual === 'Entregue') {
+                                isLate = typeof p.dias_uteis_desde_aprovacao === 'number' && p.dias_uteis_desde_aprovacao > slaMax;
+                            } else {
+                                // SE EM ANDAMENTO: Considera atrasos nas fases (ex: atraso no picking)
+                                isLate = currentAlerts.length > 0 || (typeof p.dias_uteis_desde_aprovacao === 'number' && p.dias_uteis_desde_aprovacao > slaMax);
+                            }
+
                             const personName = p.nome_pessoa ? p.nome_pessoa.replace(/\*/g, '').trim().toUpperCase() : '';
                             const route = routesMap[personName] || '-';
 
@@ -328,7 +337,8 @@ export default function OrdersPage() {
                                     <td>{p.entregue_at ? new Date(p.entregue_at).toLocaleDateString('pt-BR') : '-'}</td>
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                            {days}
+                                            {/* Mostra dias úteis reais do banco de dados se disponível, senão usa o calculo de dias corridos como fallback visual (com aviso) */}
+                                            {typeof p.dias_uteis_desde_aprovacao === 'number' ? p.dias_uteis_desde_aprovacao : days}
                                             {isLate && <AlertTriangle size={12} color="var(--danger)" />}
                                         </div>
                                     </td>
