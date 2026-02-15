@@ -66,6 +66,7 @@ export default function Dashboard() {
         const holidays = (holidaysData || []).map(h => h.data);
         const savedParams = localStorage.getItem('sla_phase_params');
         const slaParams = savedParams ? JSON.parse(savedParams) : null;
+        const slaMax = Number(localStorage.getItem('sla_max_dias_uteis') || '7');
 
         // PHASES COUNT
         const phaseNames = ['Aprovado', 'Picking', 'Packing', 'Disponível para faturamento', 'Transporte', 'Entregue'];
@@ -85,16 +86,20 @@ export default function Dashboard() {
             if (!routeStats[route]) routeStats[route] = { total: 0, onTime: 0, late: 0 };
 
             // Re-calculate SLA based on 7 days rule for delivered or current dynamic SLA for others
+            // Re-calculate SLA based on dynamic business days
             let isLate = false;
+            let businessDays = 0;
             if (p.aprovado_at) {
-                const dStart = new Date(p.aprovado_at);
                 const dEnd = p.entregue_at ? new Date(p.entregue_at) : new Date();
-                dStart.setHours(0, 0, 0, 0);
-                dEnd.setHours(0, 0, 0, 0);
-                const days = Math.floor((dEnd.getTime() - dStart.getTime()) / (1000 * 60 * 60 * 24));
+                businessDays = calculateBusinessDays(p.aprovado_at, dEnd, holidays);
 
                 const currentAlerts = checkPhaseSLAs(p, slaParams, holidays);
-                isLate = currentAlerts.length > 0 || p.sla_status === 'ATRASADO' || days > 7;
+
+                if (p.fase_atual === 'Entregue') {
+                    isLate = businessDays > slaMax;
+                } else {
+                    isLate = currentAlerts.length > 0 || businessDays > slaMax;
+                }
             }
 
             // Total per route (includes all phases as per request "pedidos totais por rota")
@@ -115,12 +120,8 @@ export default function Dashboard() {
         const globalDeliveredTotal = globalDelivered.length;
         const globalDeliveredLate = globalDelivered.filter(p => {
             if (!p.aprovado_at) return false;
-            const dStart = new Date(p.aprovado_at);
-            const dEnd = p.entregue_at ? new Date(p.entregue_at) : new Date();
-            dStart.setHours(0, 0, 0, 0);
-            dEnd.setHours(0, 0, 0, 0);
-            const days = Math.floor((dEnd.getTime() - dStart.getTime()) / (1000 * 60 * 60 * 24));
-            return days > 7;
+            const days = calculateBusinessDays(p.aprovado_at, new Date(p.entregue_at), holidays);
+            return days > slaMax;
         }).length;
 
         // SLA DAYS DISTRIBUTION
@@ -136,9 +137,7 @@ export default function Dashboard() {
                 } else if (days > 7) {
                     slaDistribution['>7']++;
                 } else {
-                    // For 0 days (same day delivery), count as 1 or separate? 
-                    // Usually same day is < 1, let's include in 1 for now or separate based on request. 
-                    // Request has 1 to 7. Let's put 0 in 1.
+                    // For 0 days
                     slaDistribution['1']++;
                 }
             }
