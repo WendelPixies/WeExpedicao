@@ -117,7 +117,7 @@ export default function ImportPage() {
             // 4. Fetch Holidays and SLA Settings
             const { data: holidaysData } = await supabase.from('feriados').select('data');
             const holidays = (holidaysData || []).map(h => h.data);
-            const slaMax = Number(localStorage.getItem('sla_max_dias_uteis') || '5');
+            const slaMax = Number(localStorage.getItem('sla_max_dias_uteis') || '7');
 
             // 4.1 Fetch Order Overrides
             const { data: overridesData } = await supabase.from('order_overrides').select('pedido_id_interno, status_manual');

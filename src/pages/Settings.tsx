@@ -5,7 +5,7 @@ import { fetchRoutesFromSheet } from '../lib/utils';
 
 export default function Settings() {
     const [holidays, setHolidays] = useState<any[]>([]);
-    const [slaMax, setSlaMax] = useState(5);
+    const [slaMax, setSlaMax] = useState(7);
     const [newHoliday, setNewHoliday] = useState({ data: '', descricao: '' });
     const [slaParams, setSlaParams] = useState({
         sla_picking: 24,

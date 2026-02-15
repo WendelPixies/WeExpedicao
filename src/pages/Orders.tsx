@@ -13,6 +13,7 @@ export default function OrdersPage() {
     const [phaseFilter, setPhaseFilter] = useState('');
     const [slaParams, setSlaParams] = useState<any>(null);
     const [holidays, setHolidays] = useState<string[]>([]);
+    const [slaMax, setSlaMax] = useState(7);
 
     const [routesMap, setRoutesMap] = useState<Record<string, string>>({});
     const [filterRoute, setFilterRoute] = useState('');
@@ -30,6 +31,9 @@ export default function OrdersPage() {
         fetchOverrides();
         const savedParams = localStorage.getItem('sla_phase_params');
         if (savedParams) setSlaParams(JSON.parse(savedParams));
+
+        const savedSla = localStorage.getItem('sla_max_dias_uteis');
+        if (savedSla) setSlaMax(Number(savedSla));
     }, []);
 
     const fetchOverrides = async () => {
@@ -249,7 +253,8 @@ export default function OrdersPage() {
                             }
 
                             const currentAlerts = checkPhaseSLAs(p, slaParams, holidays);
-                            const isLate = currentAlerts.length > 0 || p.sla_status === 'ATRASADO' || (typeof days === 'number' && days > 7);
+                            // Use dynamic SLA max from settings, ignoring the potentially stale p.sla_status from DB
+                            const isLate = currentAlerts.length > 0 || (typeof p.dias_uteis_desde_aprovacao === 'number' && p.dias_uteis_desde_aprovacao > slaMax);
                             const personName = p.nome_pessoa ? p.nome_pessoa.replace(/\*/g, '').trim().toUpperCase() : '';
                             const route = routesMap[personName] || '-';
 
