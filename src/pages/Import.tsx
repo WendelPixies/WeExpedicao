@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
-import { normalize_id, determinePhase, calculateBusinessDays, checkPhaseSLAs, calculateBusinessHours, fetchRoutesFromSheet } from '../lib/utils';
+import { determinePhase, calculateBusinessDays, checkPhaseSLAs, calculateBusinessHours, fetchRoutesFromSheet } from '../lib/utils';
 import { FileUp, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { parse as parseDateFns } from 'date-fns';
 
 // Helper duplicated here for simplicity in this file context, ideally could be exported from utils
 const getVal = (obj: any, keys: string[]) => {
