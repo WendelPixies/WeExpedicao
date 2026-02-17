@@ -230,7 +230,7 @@ export default function OrdersPage() {
                             <th>Fase Atual</th>
                             <th>Aprovado em</th>
                             <th>Entregue em</th>
-                            <th>Dias Úteis</th>
+                            <th>Dias Corridos</th>
                             <th>SLA</th>
                             <th>Motorista</th>
                         </tr>

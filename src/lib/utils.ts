@@ -7,13 +7,9 @@ export const normalize_id = (v: any): string => {
     return onlyNumbers.replace(/^0+/, '') || onlyNumbers;
 };
 
-export const isBusinessDay = (date: Date, holidays: string[]): boolean => {
-    const day = date.getDay();
-    if (day === 0) return false; // Only Sunday is not a business day
-    // We keep holiday check but only if the user actually has them in the table. 
-    // In their example (1 to 6 = 5), Jan 1st was NOT excluded.
-    const dateStr = date.toISOString().split('T')[0];
-    if (holidays.includes(dateStr)) return false;
+export const isBusinessDay = (_date: Date, _holidays: string[]): boolean => {
+    // User requested "Calendar Days" (dias corridos) without interruption.
+    // So every day is a business day.
     return true;
 };
 
