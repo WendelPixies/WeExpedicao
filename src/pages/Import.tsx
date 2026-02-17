@@ -266,10 +266,17 @@ export default function ImportPage() {
                         match['Data Entrega'];
 
                     if (csvDeliveryDate) {
-                        const driverName = (match?.['Motorista'] || match?.['Transportadora'] || '').toLowerCase().trim();
+                        // Coluna AI (Index 34) = Motorista
+                        const driverFromColAI = match._rawValues?.[34];
+                        const driverName = (driverFromColAI || match?.['Motorista'] || match?.['Transportadora'] || '').toLowerCase().trim();
+
+                        // Coluna AB (Index 27) = Status Transporte
+                        const statusColAB = (match._rawValues?.[27] || '').toLowerCase().trim();
+
                         // Se o motorista for "gb.log entregas", a data no CSV é de SAÍDA para entrega, não entrega realizada
-                        if (driverName.includes('gb.log')) {
-                            console.log(`ℹ️ Pedido ${codPedido}: Data no CSV ignorada pois motorista é GB.LOG (ainda em transporte)`);
+                        // Se o status na coluna AB for "em transito", também não é entrega realizada
+                        if (driverName.includes('gb.log') || statusColAB.includes('em transito') || statusColAB.includes('em trânsito')) {
+                            console.log(`ℹ️ Pedido ${codPedido}: Data no CSV ignorada. Motorista: ${driverName}, Status AB: ${statusColAB}`);
                         } else {
                             const parsed = parseExcelDate(csvDeliveryDate);
                             if (parsed) {
