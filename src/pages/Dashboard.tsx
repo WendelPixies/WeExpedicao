@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    PieChart, Pie, Cell, Legend
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import {
     Package,
@@ -13,6 +12,7 @@ import {
     Users
 } from 'lucide-react';
 import { checkPhaseSLAs, calculateBusinessDays, fetchRoutesFromSheet } from '../lib/utils';
+import CostPerRoutePanel from '../components/CostPerRoutePanel';
 
 export default function Dashboard() {
     const [stats, setStats] = useState<any>(null);
@@ -293,34 +293,7 @@ export default function Dashboard() {
                     </table>
                 </div>
 
-                <div className="stat-card" style={{ minHeight: '300px' }}>
-                    <h3 className="stat-label" style={{ marginBottom: '1.5rem' }}>Proporção Global de Entregas</h3>
-                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                        <ResponsiveContainer width="100%" height={250}>
-                            <PieChart>
-                                <Pie
-                                    data={[
-                                        { name: 'No Prazo', value: stats.globalDeliveredOnTime },
-                                        { name: 'Atrasado', value: stats.globalDeliveredLate }
-                                    ]}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={70}
-                                    outerRadius={90}
-                                    paddingAngle={8}
-                                    dataKey="value"
-                                >
-                                    <Cell fill="var(--success)" />
-                                    <Cell fill="var(--danger)" />
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{ background: '#0f172a', border: '1px solid var(--border)', borderRadius: '8px' }}
-                                />
-                                <Legend verticalAlign="bottom" height={36} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
+                <CostPerRoutePanel />
             </div>
 
 
