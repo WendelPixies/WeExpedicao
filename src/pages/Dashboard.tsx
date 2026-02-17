@@ -9,10 +9,10 @@ import {
     AlertTriangle,
     BarChart3,
     Calendar,
-    Users
+    Users,
+    DollarSign
 } from 'lucide-react';
 import { checkPhaseSLAs, calculateBusinessDays, fetchRoutesFromSheet } from '../lib/utils';
-import CostPerRoutePanel from '../components/CostPerRoutePanel';
 
 export default function Dashboard() {
     const [stats, setStats] = useState<any>(null);
@@ -145,6 +145,17 @@ export default function Dashboard() {
 
         const peakDay = Object.entries(deliveryDates).reduce((a, b) => a[1] > b[1] ? a : b, ['', 0]);
 
+        // Fetch route costs from route_costs table
+        const { data: routeCostsData } = await supabase
+            .from('route_costs')
+            .select('route, cost');
+
+        // Create a map of route -> cost
+        const routeCostsMap = new Map<string, number>();
+        routeCostsData?.forEach(rc => {
+            routeCostsMap.set(rc.route.trim().toUpperCase(), Number(rc.cost || 0));
+        });
+
         setStats({
             total: activePedidos.length,
             phaseCounts,
@@ -153,11 +164,17 @@ export default function Dashboard() {
             globalDeliveredLate,
             onTimeRate: globalDeliveredTotal > 0 ? (((globalDeliveredTotal - globalDeliveredLate) / globalDeliveredTotal) * 100).toFixed(1) : '0.0',
             lateRate: globalDeliveredTotal > 0 ? ((globalDeliveredLate / globalDeliveredTotal) * 100).toFixed(1) : '0.0',
-            routeStats: Object.entries(routeStats).map(([name, s]) => ({
-                name,
-                ...s,
-                rate: (s.onTime + s.late) > 0 ? ((s.onTime / (s.onTime + s.late)) * 100).toFixed(1) : '0.0'
-            })).sort((a, b) => b.total - a.total), // Sort by total volume
+            routeStats: Object.entries(routeStats).map(([name, s]) => {
+                const unitCost = routeCostsMap.get(name.trim().toUpperCase()) || 0;
+                const totalCost = s.total * unitCost;
+                return {
+                    name,
+                    ...s,
+                    rate: (s.onTime + s.late) > 0 ? ((s.onTime / (s.onTime + s.late)) * 100).toFixed(1) : '0.0',
+                    unitCost,
+                    totalCost
+                };
+            }).sort((a, b) => b.total - a.total), // Sort by total volume
             peakDay: peakDay[0] || '-',
             peakCount: peakDay[1] || 0,
             slaDistribution
@@ -166,6 +183,8 @@ export default function Dashboard() {
     };
 
     if (loading) return <div className="animate-fade">Carregando Dashboard...</div>;
+
+
 
     return (
         <div className="animate-fade">
@@ -229,6 +248,38 @@ export default function Dashboard() {
 
                 <div className="stat-card" style={{ minHeight: '400px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                        <CheckCircle2 size={18} color="var(--primary)" />
+                        <h3 className="stat-label" style={{ margin: 0 }}>SLA de Entrega (Dias Úteis)</h3>
+                    </div>
+                    <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                                <th style={{ textAlign: 'left', padding: '0.5rem 0', color: 'var(--text-muted)' }}>Dias Úteis</th>
+                                <th style={{ textAlign: 'right', padding: '0.5rem 0', color: 'var(--text-muted)' }}>Qtd</th>
+                                <th style={{ textAlign: 'right', padding: '0.5rem 0', color: 'var(--text-muted)' }}>Percentual</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {['1', '2', '3', '4', '5', '6', '7', '>7'].map(day => {
+                                const count = stats.slaDistribution[day] || 0;
+                                const total = stats.globalDeliveredTotal || 1; // Avoid div by 0
+                                const percent = ((count / total) * 100).toFixed(2);
+                                return (
+                                    <tr key={day} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                                        <td style={{ padding: '0.5rem 0', fontWeight: 600 }}>{day === '>7' ? 'Acima de 7' : day}</td>
+                                        <td style={{ textAlign: 'right', padding: '0.5rem 0' }}>{count}</td>
+                                        <td style={{ textAlign: 'right', padding: '0.5rem 0' }}>{percent}%</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                <div className="stat-card" style={{ minHeight: '400px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
                         <Users size={18} color="var(--primary)" />
                         <h3 className="stat-label" style={{ margin: 0 }}>Quantidade de Pedidos por Rota</h3>
                     </div>
@@ -260,40 +311,47 @@ export default function Dashboard() {
                         </table>
                     </div>
                 </div>
-            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-                <div className="stat-card" style={{ minHeight: '300px' }}>
+                <div className="stat-card" style={{ minHeight: '400px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                        <CheckCircle2 size={18} color="var(--primary)" />
-                        <h3 className="stat-label" style={{ margin: 0 }}>SLA de Entrega (Dias Úteis)</h3>
+                        <DollarSign size={18} color="var(--success)" />
+                        <h3 className="stat-label" style={{ margin: 0 }}>Custo de Entrega por Rota</h3>
                     </div>
-                    <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                <th style={{ textAlign: 'left', padding: '0.5rem 0', color: 'var(--text-muted)' }}>Dias Úteis</th>
-                                <th style={{ textAlign: 'right', padding: '0.5rem 0', color: 'var(--text-muted)' }}>Qtd</th>
-                                <th style={{ textAlign: 'right', padding: '0.5rem 0', color: 'var(--text-muted)' }}>Percentual</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {['1', '2', '3', '4', '5', '6', '7', '>7'].map(day => {
-                                const count = stats.slaDistribution[day] || 0;
-                                const total = stats.globalDeliveredTotal || 1; // Avoid div by 0
-                                const percent = ((count / total) * 100).toFixed(2);
-                                return (
-                                    <tr key={day} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-                                        <td style={{ padding: '0.5rem 0', fontWeight: 600 }}>{day === '>7' ? 'Acima de 7' : day}</td>
-                                        <td style={{ textAlign: 'right', padding: '0.5rem 0' }}>{count}</td>
-                                        <td style={{ textAlign: 'right', padding: '0.5rem 0' }}>{percent}%</td>
+                    <div style={{ overflowY: 'auto', maxHeight: '300px' }}>
+                        <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
+                                    <th style={{ padding: '0.5rem 0', color: 'var(--text-muted)' }}>Rota</th>
+                                    <th style={{ padding: '0.5rem 0', color: 'var(--text-muted)', textAlign: 'right' }}>Qtd</th>
+                                    <th style={{ padding: '0.5rem 0', color: 'var(--text-muted)', textAlign: 'right' }}>Custo Unit.</th>
+                                    <th style={{ padding: '0.5rem 0', color: 'var(--text-muted)', textAlign: 'right' }}>Custo Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {stats.routeStats.map((r: any) => (
+                                    <tr key={r.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                                        <td style={{ padding: '0.75rem 0', fontWeight: 600 }}>{r.name}</td>
+                                        <td style={{ padding: '0.75rem 0', textAlign: 'right' }}>{r.total}</td>
+                                        <td style={{ padding: '0.75rem 0', textAlign: 'right', color: 'var(--text-muted)' }}>
+                                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(r.unitCost || 0)}
+                                        </td>
+                                        <td style={{ padding: '0.75rem 0', textAlign: 'right', fontWeight: 700, color: 'var(--success)' }}>
+                                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(r.totalCost || 0)}
+                                        </td>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', textAlign: 'right' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginRight: '0.5rem' }}>Total Geral:</span>
+                        <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--success)' }}>
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                                stats.routeStats.reduce((sum: number, r: any) => sum + (r.totalCost || 0), 0)
+                            )}
+                        </span>
+                    </div>
                 </div>
-
-                <CostPerRoutePanel />
             </div>
 
 

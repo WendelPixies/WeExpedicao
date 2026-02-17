@@ -493,7 +493,20 @@ export default function Settings() {
                                             style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', height: 'auto' }}
                                         />
                                     </td>
-                                    <td></td>
+                                    <td style={{ textAlign: 'right', padding: '0.5rem' }}>
+                                        <button
+                                            onClick={() => {
+                                                setFilterMunicipio('');
+                                                setFilterBairro('');
+                                                setFilterRota('');
+                                            }}
+                                            className="btn btn-outline"
+                                            style={{ padding: '0.25rem 0.5rem', height: 'auto', fontSize: '0.75rem' }}
+                                            title="Limpar Filtros"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    </td>
                                 </tr>
                                 {dbRoutes.length === 0 && (
                                     <tr>

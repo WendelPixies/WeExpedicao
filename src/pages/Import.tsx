@@ -22,11 +22,23 @@ export default function ImportPage() {
     const [importing, setImporting] = useState(false);
     const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
     const [routesMap, setRoutesMap] = useState<Record<string, string>>({});
+    const [lastImport, setLastImport] = useState<any>(null);
 
-    // Load routes map on component mount
+    // Load routes map and last import on component mount
     React.useEffect(() => {
         fetchRoutesFromSheet().then(setRoutesMap);
+        fetchLastImport();
     }, []);
+
+    const fetchLastImport = async () => {
+        const { data } = await supabase
+            .from('imports')
+            .select('*')
+            .order('imported_at', { ascending: false })
+            .limit(1)
+            .single();
+        if (data) setLastImport(data);
+    };
 
     const handleXlsxUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) setXlsxFile(e.target.files[0]);
@@ -325,6 +337,8 @@ export default function ImportPage() {
                         const loc = [b, c].filter(p => p && p.trim()).join(' - ');
                         return loc.replace(/\/RJ/g, '').trim() || 'Localização não informada';
                     })(),
+                    municipio: getVal(rx, ['Município', 'Municipio', 'Cidade']) || getVal(match, ['Município', 'Municipio', 'Cidade']) || null,
+                    bairro: getVal(rx, ['Bairro']) || getVal(match, ['Bairro']) || null,
                     nome_pessoa: getVal(rx, ['NomePessoa', 'Nome Pessoa']) || null,
                     situacao: getVal(rx, ['SituaçãoComercial', 'Situação Comercial', 'SituacaoComercial']) || null,
                     match_key_used: match ? 'matched' : 'none'
@@ -371,6 +385,7 @@ export default function ImportPage() {
             const now = new Date();
             const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             setStatus({ type: 'success', message: `Importação concluída com sucesso às ${timeStr}!` });
+            fetchLastImport(); // Refresh last import log
         } catch (err: any) {
             console.error(err);
             setStatus({ type: 'error', message: `Erro na importação: ${err.message}` });
@@ -455,6 +470,50 @@ export default function ImportPage() {
                     }}>
                         {status.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle size={20} />}
                         <span>{status.message}</span>
+                    </div>
+                )}
+
+                {lastImport && (
+                    <div style={{
+                        maxWidth: '500px',
+                        padding: '1rem',
+                        borderRadius: 'var(--radius)',
+                        background: 'rgba(255,255,255,0.02)',
+                        border: '1px solid rgba(255,255,255,0.05)'
+                    }}>
+                        <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            Última Importação
+                        </h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>Data/Hora:</span>
+                                <span style={{ fontWeight: 600 }}>
+                                    {new Date(lastImport.imported_at).toLocaleString('pt-BR', {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    })}
+                                </span>
+                            </div>
+                            {lastImport.xlsx_filename && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>XLSX:</span>
+                                    <span style={{ fontWeight: 600, maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {lastImport.xlsx_filename}
+                                    </span>
+                                </div>
+                            )}
+                            {lastImport.csv_filename && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>CSV:</span>
+                                    <span style={{ fontWeight: 600, maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {lastImport.csv_filename}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
