@@ -173,7 +173,7 @@ export default function ImportPage() {
             // If XLSX is missing, we check CSV? Usually system is based on XLSX orders.
 
             const consolidated: any[] = [];
-            const processedIds = new Set();
+
 
             // Helper to parsing Excel dates which might be numbers or strings
             const parseExcelDate = (val: any) => {
