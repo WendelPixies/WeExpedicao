@@ -266,10 +266,16 @@ export default function ImportPage() {
                         match['Data Entrega'];
 
                     if (csvDeliveryDate) {
-                        const parsed = parseExcelDate(csvDeliveryDate);
-                        if (parsed) {
-                            entregueAt = parsed;
-                            console.log(`✅ Pedido ${codPedido}: Data de entrega encontrada no CSV: ${csvDeliveryDate} -> ${parsed}`);
+                        const driverName = (match?.['Motorista'] || match?.['Transportadora'] || '').toLowerCase().trim();
+                        // Se o motorista for "gb.log entregas", a data no CSV é de SAÍDA para entrega, não entrega realizada
+                        if (driverName.includes('gb.log')) {
+                            console.log(`ℹ️ Pedido ${codPedido}: Data no CSV ignorada pois motorista é GB.LOG (ainda em transporte)`);
+                        } else {
+                            const parsed = parseExcelDate(csvDeliveryDate);
+                            if (parsed) {
+                                entregueAt = parsed;
+                                console.log(`✅ Pedido ${codPedido}: Data de entrega encontrada no CSV: ${csvDeliveryDate} -> ${parsed}`);
+                            }
                         }
                     }
                 }
