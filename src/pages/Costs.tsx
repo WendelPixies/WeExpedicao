@@ -15,25 +15,10 @@ interface AggregatedRoute {
     quantity: number;
     unit_cost: number;
     total_cost: number;
+    orders: any[];
 }
 
-// Fetches ALL rows from a table/query by paginating in chunks to bypass 1000-row limit
-async function fetchAllRows(
-    query: any,
-    chunkSize = 1000
-): Promise<any[]> {
-    let allRows: any[] = [];
-    let from = 0;
-    while (true) {
-        const { data, error } = await query.range(from, from + chunkSize - 1);
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        allRows = allRows.concat(data);
-        if (data.length < chunkSize) break;
-        from += chunkSize;
-    }
-    return allRows;
-}
+import { fetchAllRows } from '../lib/utils';
 
 export default function CostsPage() {
     const [startDate, setStartDate] = useState('');
@@ -42,6 +27,7 @@ export default function CostsPage() {
     const [aggregatedData, setAggregatedData] = useState<AggregatedRoute[]>([]);
     const [totalCost, setTotalCost] = useState(0);
     const [totalOrders, setTotalOrders] = useState(0);
+    const [selectedRoute, setSelectedRoute] = useState<AggregatedRoute | null>(null);
 
     useEffect(() => {
         const now = new Date();
@@ -119,10 +105,12 @@ export default function CostsPage() {
                     quantity: 0,
                     unit_cost: unitCost,
                     total_cost: 0,
+                    orders: []
                 };
 
                 existing.quantity += 1;
                 existing.total_cost += unitCost;
+                existing.orders.push(order);
                 aggregation.set(routeName, existing);
 
                 grandTotalOrders += 1;
@@ -240,68 +228,199 @@ export default function CostsPage() {
                     </span>
                 </div>
 
-                {loading ? (
-                    <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        <RefreshCw size={32} className="animate-spin" style={{ margin: '0 auto 1rem' }} />
-                        <p>Carregando dados...</p>
-                    </div>
-                ) : aggregatedData.length === 0 ? (
-                    <div className="table-container" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        <AlertTriangle size={32} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
-                        <p>Nenhum dado encontrado para o período selecionado.</p>
-                    </div>
-                ) : (
-                    <div className="dashboard-grid">
-                        {aggregatedData.map((item, idx) => (
-                            <div key={idx} className="stat-card" style={{
-                                borderLeft: item.route === 'Sem Rota Definida' ? '4px solid var(--danger)' : '1px solid var(--border)'
-                            }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                                    <div style={{
-                                        fontSize: '0.625rem',
-                                        fontWeight: 700,
-                                        color: 'var(--text-muted)',
-                                        background: 'rgba(255,255,255,0.05)',
-                                        padding: '2px 6px',
-                                        borderRadius: '4px'
-                                    }}>
-                                        #{idx + 1}
-                                    </div>
-                                    <MapPin size={16} color={item.route === 'Sem Rota Definida' ? 'var(--danger)' : 'var(--primary)'} />
-                                </div>
+            </div>
 
-                                <div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem', color: item.route === 'Sem Rota Definida' ? 'var(--danger)' : 'var(--text-main)' }}>
-                                    {item.route}
+            {loading ? (
+                <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <RefreshCw size={32} className="animate-spin" style={{ margin: '0 auto 1rem' }} />
+                    <p>Carregando dados...</p>
+                </div>
+            ) : aggregatedData.length === 0 ? (
+                <div className="table-container" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <AlertTriangle size={32} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
+                    <p>Nenhum dado encontrado para o período selecionado.</p>
+                </div>
+            ) : (
+                <div className="dashboard-grid">
+                    {aggregatedData.map((item, idx) => (
+                        <div
+                            key={idx}
+                            onClick={() => setSelectedRoute(item)}
+                            className="stat-card"
+                            style={{
+                                borderLeft: item.route === 'Sem Rota Definida' ? '4px solid var(--danger)' : '1px solid var(--border)',
+                                cursor: 'pointer',
+                                transition: 'transform 0.2s, box-shadow 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-2px)';
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.boxShadow = 'none';
+                            }}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                                <div style={{
+                                    fontSize: '0.625rem',
+                                    fontWeight: 700,
+                                    color: 'var(--text-muted)',
+                                    background: 'rgba(255,255,255,0.05)',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px'
+                                }}>
+                                    #{idx + 1}
                                 </div>
+                                <MapPin size={16} color={item.route === 'Sem Rota Definida' ? 'var(--danger)' : 'var(--primary)'} />
+                            </div>
 
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>PEDIDOS</span>
-                                        <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{item.quantity}</span>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>UNITÁRIO</span>
-                                        <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{formatCurrency(item.unit_cost)}</span>
-                                    </div>
-                                    <div style={{
-                                        marginTop: '0.5rem',
-                                        paddingTop: '0.75rem',
-                                        borderTop: '1px solid var(--border)',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center'
-                                    }}>
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>CUSTO TOTAL</span>
-                                        <span style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--success)' }}>
-                                            {formatCurrency(item.total_cost)}
-                                        </span>
-                                    </div>
+                            <div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem', color: item.route === 'Sem Rota Definida' ? 'var(--danger)' : 'var(--text-main)' }}>
+                                {item.route}
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>PEDIDOS</span>
+                                    <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{item.quantity}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>UNITÁRIO</span>
+                                    <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{formatCurrency(item.unit_cost)}</span>
+                                </div>
+                                <div style={{
+                                    marginTop: '0.5rem',
+                                    paddingTop: '0.75rem',
+                                    borderTop: '1px solid var(--border)',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>CUSTO TOTAL</span>
+                                    <span style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--success)' }}>
+                                        {formatCurrency(item.total_cost)}
+                                    </span>
                                 </div>
                             </div>
-                        ))}
+                        </div>
+                    ))}
+                </div>
+            )}
+            {/* Order Details Modal */}
+            {
+                selectedRoute && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        zIndex: 1000,
+                        padding: '2rem'
+                    }} onClick={() => setSelectedRoute(null)}>
+                        <div style={{
+                            backgroundColor: '#1e293b',
+                            borderRadius: '8px',
+                            width: '100%',
+                            maxWidth: '900px',
+                            maxHeight: '80vh',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            border: '1px solid var(--border)',
+                            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+                        }} onClick={e => e.stopPropagation()}>
+                            <div style={{
+                                padding: '1.5rem',
+                                borderBottom: '1px solid var(--border)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                            }}>
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: '1.25rem', color: selectedRoute.route === 'Sem Rota Definida' ? 'var(--danger)' : 'var(--text-main)' }}>
+                                        {selectedRoute.route}
+                                    </h3>
+                                    <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                                        {selectedRoute.quantity} pedidos vinculados
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setSelectedRoute(null)}
+                                    style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: 'var(--text-muted)',
+                                        cursor: 'pointer',
+                                        padding: '0.5rem'
+                                    }}
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                            <div style={{ overflow: 'auto', padding: '1.5rem' }}>
+                                <table style={{ width: '100%', fontSize: '0.875rem', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                        <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
+                                            <th style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>ID</th>
+                                            <th style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>Data</th>
+                                            <th style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>Cliente/Nome</th>
+                                            <th style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>Localização</th>
+                                            <th style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>Situação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {selectedRoute.orders.sort((a: any, b: any) => new Date(b.data_arquivo).getTime() - new Date(a.data_arquivo).getTime()).map((order: any, idx: number) => (
+                                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
+                                                        {order.id?.toString().slice(0, 8) || '-'}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    {new Date(order.data_arquivo).toLocaleDateString('pt-BR')}
+                                                </td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    {order.nome_pessoa || '-'}
+                                                </td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                        <span>{order.bairro}</span>
+                                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{order.municipio}</span>
+                                                    </div>
+                                                </td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    <span style={{
+                                                        padding: '2px 8px',
+                                                        borderRadius: '999px',
+                                                        fontSize: '0.75rem',
+                                                        background: order.fase_atual === 'Entregue' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255,255,255,0.05)',
+                                                        color: order.fase_atual === 'Entregue' ? 'var(--success)' : 'var(--text-muted)'
+                                                    }}>
+                                                        {order.fase_atual}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', textAlign: 'right' }}>
+                                <button
+                                    className="btn"
+                                    onClick={() => setSelectedRoute(null)}
+                                >
+                                    Fechar
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                )}
-            </div>
-        </div>
+                )
+            }
+        </div >
     );
 }
+

@@ -332,3 +332,21 @@ export const fetchRoutesFromSheet = async (): Promise<Record<string, string>> =>
         return {};
     }
 };
+
+// Fetches ALL rows from a table/query by paginating in chunks to bypass 1000-row limit
+export async function fetchAllRows(
+    query: any,
+    chunkSize = 1000
+): Promise<any[]> {
+    let allRows: any[] = [];
+    let from = 0;
+    while (true) {
+        const { data, error } = await query.range(from, from + chunkSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allRows = allRows.concat(data);
+        if (data.length < chunkSize) break;
+        from += chunkSize;
+    }
+    return allRows;
+}

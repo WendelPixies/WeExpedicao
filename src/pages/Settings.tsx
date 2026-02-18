@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Calendar, Plus, Trash2, Save, RefreshCw, DollarSign, MapPin, Edit2, X, Check } from 'lucide-react';
-import { fetchRoutesFromSheet } from '../lib/utils';
+import { fetchRoutesFromSheet, fetchAllRows } from '../lib/utils';
 import * as XLSX from 'xlsx';
 
 export default function Settings() {
@@ -68,8 +68,9 @@ export default function Settings() {
         const sheetRoutes = Array.from(new Set(Object.values(map))).sort();
 
         // Fetch from DB
-        const { data: dbData } = await supabase.from('routes').select('*').order('municipio', { ascending: true }).order('bairro', { ascending: true }).order('name', { ascending: true });
-        const dbRoutesList = dbData || [];
+        const dbRoutesList = await fetchAllRows(
+            supabase.from('routes').select('*').order('municipio', { ascending: true }).order('bairro', { ascending: true }).order('name', { ascending: true })
+        );
         setDbRoutes(dbRoutesList);
 
         // Merge distinct routes
@@ -209,12 +210,14 @@ export default function Settings() {
                     return;
                 }
 
-                // Carregar dados atuais para validação
-                const { data: currentDbData } = await supabase.from('routes').select('municipio, bairro');
-                const existingSet = new Set(currentDbData?.map((r: any) => `${r.municipio}|${r.bairro}`) || []);
+                // Carregar dados atuais para validação - não utilizado mais pois usamos upsert, mas mantido se quiser validar?
+                // const currentDbData = await fetchAllRows(
+                //     supabase.from('routes').select('municipio, bairro')
+                // );
+                // const existingSet = new Set(currentDbData?.map((r: any) => `${r.municipio}|${r.bairro}`) || []);
 
-                const rowsToInsert: any[] = [];
-                const rejected: string[] = [];
+                // const rowsToInsert: any[] = [];
+                const rowsToUpdate: any[] = []; // NEW: Track updates to avoid duplicates
 
                 jsonData.forEach((row: any) => {
                     const municipio = (row['Município'] || row['município'] || row['Municipio'] || row['municipio'])?.trim().toUpperCase();
@@ -227,38 +230,22 @@ export default function Settings() {
                         rota = rota.replace('ROTA ', '').trim();
                     }
 
-                    const key = `${municipio}|${bairro}`;
-
-                    if (existingSet.has(key)) {
-                        rejected.push(`${municipio} - ${bairro} (Já existente)`);
-                    } else {
-                        // Verifica duplicidade no próprio arquivo
-                        const fileDuplicate = rowsToInsert.find(r => r.municipio === municipio && r.bairro === bairro);
-                        if (fileDuplicate) {
-                            rejected.push(`${municipio} - ${bairro} (Duplicado no arquivo)`);
-                        } else {
-                            rowsToInsert.push({
-                                municipio,
-                                bairro,
-                                name: rota
-                            });
-                        }
-                    }
+                    // Always allow update/insert - we use Upsert on conflict (municipio, bairro)
+                    rowsToUpdate.push({
+                        municipio,
+                        bairro,
+                        name: rota
+                    });
                 });
 
-                if (rowsToInsert.length > 0) {
-                    const { error } = await supabase.from('routes').insert(rowsToInsert);
+                if (rowsToUpdate.length > 0) {
+                    // Upsert handles both insert and update on conflict
+                    const { error } = await supabase.from('routes').upsert(rowsToUpdate, { onConflict: 'municipio,bairro' });
                     if (error) throw error;
                     loadRouteData();
                 }
 
-                let message = `Processamento concluído!\n\nInseridos: ${rowsToInsert.length}`;
-                if (rejected.length > 0) {
-                    message += `\nRejeitados: ${rejected.length}\n\nDetalhes (primeiros 10):\n${rejected.slice(0, 10).join('\n')}`;
-                    if (rejected.length > 10) message += `\n... e mais ${rejected.length - 10} itens.`;
-                }
-
-                alert(message);
+                alert(`Processamento concluído!\n\nRegistros processados: ${rowsToUpdate.length}`);
             } catch (err: any) {
                 console.error(err);
                 alert('Erro ao processar arquivo: ' + err.message);
