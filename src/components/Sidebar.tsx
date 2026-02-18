@@ -8,7 +8,8 @@ import {
     ChevronLeft,
     Menu,
     FileUp,
-    RotateCcw
+    RotateCcw,
+    DollarSign
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -23,6 +24,7 @@ export default function Sidebar({ collapsed, toggleCollapse }: SidebarProps) {
         { to: '/pedidos', icon: ListOrdered, label: 'Pedidos' },
         { to: '/devolucao', icon: RotateCcw, label: 'Devolução' },
         { to: '/importar', icon: FileUp, label: 'Importar' },
+        { to: '/custos', icon: DollarSign, label: 'Custos' },
         { to: '/configuracoes', icon: Settings, label: 'Configurações' },
     ];
 

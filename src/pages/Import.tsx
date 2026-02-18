@@ -353,7 +353,17 @@ export default function ImportPage() {
                     bairro: getVal(rx, ['Bairro']) || getVal(match, ['Bairro']) || null,
                     nome_pessoa: getVal(rx, ['NomePessoa', 'Nome Pessoa']) || null,
                     situacao: getVal(rx, ['SituaçãoComercial', 'Situação Comercial', 'SituacaoComercial']) || null,
-                    match_key_used: match ? 'matched' : 'none'
+                    match_key_used: match ? 'matched' : 'none',
+                    data_arquivo: (() => {
+                        // User specified Column BG (Index 58) for Date Range Filter
+                        if (match && match._rawValues && match._rawValues[58]) {
+                            const bgDate = parseExcelDate(match._rawValues[58]);
+                            if (bgDate) return bgDate;
+                        }
+                        // Fallback to approved date if BG is missing, to ensure it shows up in some filter? 
+                        // Or maybe null. Let's keep it null if missing so we know.
+                        return null;
+                    })()
                 };
 
                 const phaseAlerts = checkPhaseSLAs(pedidoData, null, holidays);
