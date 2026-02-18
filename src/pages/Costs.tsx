@@ -4,8 +4,10 @@ import {
     DollarSign,
     Calendar,
     Package,
-    AlertCircle,
-    MapPin
+    TrendingUp,
+    MapPin,
+    RefreshCw,
+    AlertTriangle,
 } from 'lucide-react';
 
 interface AggregatedRoute {
@@ -13,6 +15,24 @@ interface AggregatedRoute {
     quantity: number;
     unit_cost: number;
     total_cost: number;
+}
+
+// Fetches ALL rows from a table/query by paginating in chunks to bypass 1000-row limit
+async function fetchAllRows(
+    query: any,
+    chunkSize = 1000
+): Promise<any[]> {
+    let allRows: any[] = [];
+    let from = 0;
+    while (true) {
+        const { data, error } = await query.range(from, from + chunkSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allRows = allRows.concat(data);
+        if (data.length < chunkSize) break;
+        from += chunkSize;
+    }
+    return allRows;
 }
 
 export default function CostsPage() {
@@ -23,7 +43,6 @@ export default function CostsPage() {
     const [totalCost, setTotalCost] = useState(0);
     const [totalOrders, setTotalOrders] = useState(0);
 
-    // Initialize filters with current month
     useEffect(() => {
         const now = new Date();
         const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -41,11 +60,10 @@ export default function CostsPage() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            // 1. Fetch Routes Mapping (Municipio + Bairro -> Route Name)
+            // 1. Routes mapping
             const { data: routesData, error: routesErr } = await supabase
                 .from('routes')
                 .select('municipio, bairro, name');
-
             if (routesErr) throw routesErr;
 
             const routeLookup = new Map<string, string>();
@@ -56,11 +74,10 @@ export default function CostsPage() {
                 }
             });
 
-            // 2. Fetch Route Costs (Route Name -> Cost)
+            // 2. Route costs
             const { data: costsData, error: costsErr } = await supabase
                 .from('route_costs')
                 .select('route, cost');
-
             if (costsErr) throw costsErr;
 
             const costLookup = new Map<string, number>();
@@ -68,21 +85,21 @@ export default function CostsPage() {
                 costLookup.set(c.route, Number(c.cost));
             });
 
-            // 3. Fetch Consolidated Orders (no limit - removed .limit())
-            const { data: ordersData, error: ordersErr } = await supabase
-                .from('pedidos_consolidados')
-                .select('municipio, bairro, fase_atual, situacao, data_arquivo')
-                .gte('data_arquivo', `${startDate}T00:00:00`)
-                .lte('data_arquivo', `${endDate}T23:59:59`);
+            // 3. Fetch ALL consolidated orders
+            const ordersData = await fetchAllRows(
+                supabase
+                    .from('pedidos_consolidados')
+                    .select('municipio, bairro, fase_atual, situacao, data_arquivo')
+                    .gte('data_arquivo', `${startDate}T00:00:00`)
+                    .lte('data_arquivo', `${endDate}T23:59:59`)
+            );
 
-            if (ordersErr) throw ordersErr;
-
-            // 4. Aggregate
+            // 4. Aggregate by route
             const aggregation = new Map<string, AggregatedRoute>();
             let grandTotalCost = 0;
             let grandTotalOrders = 0;
 
-            ordersData?.forEach(order => {
+            ordersData.forEach(order => {
                 const status = (order.fase_atual || '').toLowerCase();
                 const situacao = (order.situacao || '').toLowerCase();
 
@@ -94,31 +111,31 @@ export default function CostsPage() {
                 const bair = (order.bairro || '').trim().toUpperCase();
                 const key = `${muni} - ${bair}`;
 
-                let routeName = routeLookup.get(key) || 'Sem Rota Definida';
+                const routeName = routeLookup.get(key) || 'Sem Rota Definida';
                 const unitCost = costLookup.get(routeName) || 0;
 
                 const existing = aggregation.get(routeName) || {
                     route: routeName,
                     quantity: 0,
                     unit_cost: unitCost,
-                    total_cost: 0
+                    total_cost: 0,
                 };
 
                 existing.quantity += 1;
                 existing.total_cost += unitCost;
-
                 aggregation.set(routeName, existing);
 
                 grandTotalOrders += 1;
                 grandTotalCost += unitCost;
             });
 
-            const sortedData = Array.from(aggregation.values()).sort((a, b) => b.total_cost - a.total_cost);
+            const sortedData = Array.from(aggregation.values()).sort((a, b) =>
+                a.route.localeCompare(b.route)
+            );
 
             setAggregatedData(sortedData);
             setTotalCost(grandTotalCost);
             setTotalOrders(grandTotalOrders);
-
         } catch (error) {
             console.error('Error fetching costs data:', error);
         } finally {
@@ -126,180 +143,164 @@ export default function CostsPage() {
         }
     };
 
-    const formatCurrency = (val: number) => {
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-    };
+    const formatCurrency = (val: number) =>
+        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
     return (
-        <div className="w-full h-full p-6 space-y-6 overflow-y-auto">
-            {/* Header Section: Title + Filters */}
-            <div className="space-y-4">
+        <div className="main-content">
+            <div className="header">
                 <div>
-                    <h1 className="text-3xl font-bold text-white tracking-tight">
-                        Gestão de Custos
-                    </h1>
-                    <p className="text-slate-400 text-sm mt-1">
+                    <h1 className="title">Gestão de Custos</h1>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
                         Acompanhamento financeiro detalhado por rota de entrega
                     </p>
                 </div>
 
-                {/* Date Filters */}
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 text-slate-400">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)' }}>
                         <Calendar size={18} />
-                        <span className="text-sm font-semibold">Período</span>
+                        <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>Período</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <input
                             type="date"
+                            className="input"
+                            style={{ width: 'auto' }}
                             value={startDate}
                             onChange={(e) => setStartDate(e.target.value)}
-                            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                         />
-                        <span className="text-slate-500 text-sm">até</span>
+                        <span style={{ color: 'var(--text-muted)' }}>até</span>
                         <input
                             type="date"
+                            className="input"
+                            style={{ width: 'auto' }}
                             value={endDate}
                             onChange={(e) => setEndDate(e.target.value)}
-                            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                         />
                         <button
+                            className="btn btn-primary"
                             onClick={fetchData}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                            disabled={loading}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                         >
-                            Atualizar
+                            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                            <span>Atualizar</span>
                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* KPI Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Card 1: Total de Pedidos */}
-                <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm border border-slate-700/60 rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="p-3 bg-blue-500/10 rounded-xl">
-                            <Package size={24} className="text-blue-400" />
-                        </div>
+            {/* KPI Section using dashboard-grid and stat-card */}
+            <div className="dashboard-grid">
+                <div className="stat-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div className="stat-label">TOTAL DE PEDIDOS</div>
+                        <Package size={20} color="var(--primary)" />
                     </div>
-                    <div className="space-y-1">
-                        <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide">
-                            Total de Pedidos
-                        </p>
-                        <p className="text-4xl font-bold text-white">
-                            {totalOrders.toLocaleString('pt-BR')}
-                        </p>
-                    </div>
+                    <div className="stat-value">{totalOrders.toLocaleString('pt-BR')}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>pedidos no período</div>
                 </div>
 
-                {/* Card 2: Custo Médio */}
-                <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm border border-slate-700/60 rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="p-3 bg-amber-500/10 rounded-xl">
-                            <AlertCircle size={24} className="text-amber-400" />
-                        </div>
+                <div className="stat-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div className="stat-label">CUSTO MÉDIO</div>
+                        <TrendingUp size={20} color="var(--warning)" />
                     </div>
-                    <div className="space-y-1">
-                        <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide">
-                            Custo Médio
-                        </p>
-                        <p className="text-4xl font-bold text-white">
-                            {totalOrders > 0 ? formatCurrency(totalCost / totalOrders) : 'R$ 0,00'}
-                        </p>
+                    <div className="stat-value">
+                        {totalOrders > 0 ? formatCurrency(totalCost / totalOrders) : 'R$ 0,00'}
                     </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>por pedido entregue</div>
                 </div>
 
-                {/* Card 3: Custo Total */}
-                <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm border border-slate-700/60 rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="p-3 bg-emerald-500/10 rounded-xl">
-                            <DollarSign size={24} className="text-emerald-400" />
-                        </div>
+                <div className="stat-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div className="stat-label">CUSTO TOTAL</div>
+                        <DollarSign size={20} color="var(--success)" />
                     </div>
-                    <div className="space-y-1">
-                        <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide">
-                            Custo Total
-                        </p>
-                        <p className="text-4xl font-bold text-white">
-                            {formatCurrency(totalCost)}
-                        </p>
+                    <div className="stat-value" style={{ color: 'var(--success)' }}>
+                        {formatCurrency(totalCost)}
                     </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>custo operacional total</div>
                 </div>
             </div>
 
-            {/* Main Table */}
-            <div className="bg-slate-800 border border-slate-700/60 rounded-xl shadow-xl overflow-hidden">
-                <div className="p-4 border-b border-slate-700/60 bg-slate-800/50 flex justify-between items-center">
-                    <h2 className="text-base font-bold text-white flex items-center gap-2">
-                        <MapPin size={18} className="text-slate-400" /> Detalhamento por Rota
-                    </h2>
+            <div style={{ marginTop: '2.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                    <MapPin size={20} color="var(--text-muted)" />
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Detalhamento por Rota</h2>
+                    <span style={{
+                        marginLeft: 'auto',
+                        fontSize: '0.75rem',
+                        color: 'var(--text-muted)',
+                        background: 'var(--border)',
+                        padding: '2px 8px',
+                        borderRadius: '999px'
+                    }}>
+                        {aggregatedData.length} rotas
+                    </span>
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-slate-900/50 text-slate-400 text-xs uppercase tracking-wider">
-                                <th className="p-4 font-semibold border-b border-slate-700/60">Rota</th>
-                                <th className="p-4 font-semibold border-b border-slate-700/60 text-center">Quantidade</th>
-                                <th className="p-4 font-semibold border-b border-slate-700/60 text-right">Custo Unitário</th>
-                                <th className="p-4 font-semibold border-b border-slate-700/60 text-right">Custo Total</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-700/50 text-sm text-slate-300">
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={4} className="p-12 text-center text-slate-400">
-                                        <div className="flex flex-col items-center justify-center gap-3">
-                                            <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                                            <p className="text-xs uppercase tracking-wide">Carregando dados...</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : aggregatedData.length === 0 ? (
-                                <tr>
-                                    <td colSpan={4} className="p-12 text-center text-slate-500 italic">
-                                        Nenhum dado encontrado para o período selecionado.
-                                    </td>
-                                </tr>
-                            ) : (
-                                aggregatedData.map((row, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-700/30 transition-colors group">
-                                        <td className="p-4 font-medium text-white">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`p-2 rounded-lg ${row.route === 'Sem Rota Definida'
-                                                    ? 'bg-red-500/10 text-red-400'
-                                                    : 'bg-emerald-500/10 text-emerald-400'
-                                                    }`}>
-                                                    <MapPin size={16} />
-                                                </div>
-                                                <span>{row.route}</span>
-                                            </div>
-                                        </td>
-                                        <td className="p-4 text-center">
-                                            <span className="bg-slate-900 border border-slate-700 px-2.5 py-0.5 rounded-full text-xs font-mono">
-                                                {row.quantity}
-                                            </span>
-                                        </td>
-                                        <td className="p-4 text-right font-mono text-slate-400">
-                                            {formatCurrency(row.unit_cost)}
-                                        </td>
-                                        <td className="p-4 text-right font-bold font-mono text-emerald-400 group-hover:text-emerald-300 transition-colors">
-                                            {formatCurrency(row.total_cost)}
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                        <tfoot>
-                            <tr className="bg-slate-900/80 border-t border-slate-700 font-bold text-white">
-                                <td className="p-4">TOTAL GERAL</td>
-                                <td className="p-4 text-center">{totalOrders}</td>
-                                <td className="p-4"></td>
-                                <td className="p-4 text-right text-emerald-400 text-lg">{formatCurrency(totalCost)}</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
+                {loading ? (
+                    <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        <RefreshCw size={32} className="animate-spin" style={{ margin: '0 auto 1rem' }} />
+                        <p>Carregando dados...</p>
+                    </div>
+                ) : aggregatedData.length === 0 ? (
+                    <div className="table-container" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        <AlertTriangle size={32} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
+                        <p>Nenhum dado encontrado para o período selecionado.</p>
+                    </div>
+                ) : (
+                    <div className="dashboard-grid">
+                        {aggregatedData.map((item, idx) => (
+                            <div key={idx} className="stat-card" style={{
+                                borderLeft: item.route === 'Sem Rota Definida' ? '4px solid var(--danger)' : '1px solid var(--border)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                                    <div style={{
+                                        fontSize: '0.625rem',
+                                        fontWeight: 700,
+                                        color: 'var(--text-muted)',
+                                        background: 'rgba(255,255,255,0.05)',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px'
+                                    }}>
+                                        #{idx + 1}
+                                    </div>
+                                    <MapPin size={16} color={item.route === 'Sem Rota Definida' ? 'var(--danger)' : 'var(--primary)'} />
+                                </div>
+
+                                <div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem', color: item.route === 'Sem Rota Definida' ? 'var(--danger)' : 'var(--text-main)' }}>
+                                    {item.route}
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>PEDIDOS</span>
+                                        <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{item.quantity}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>UNITÁRIO</span>
+                                        <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{formatCurrency(item.unit_cost)}</span>
+                                    </div>
+                                    <div style={{
+                                        marginTop: '0.5rem',
+                                        paddingTop: '0.75rem',
+                                        borderTop: '1px solid var(--border)',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center'
+                                    }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>CUSTO TOTAL</span>
+                                        <span style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--success)' }}>
+                                            {formatCurrency(item.total_cost)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );
