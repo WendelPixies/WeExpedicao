@@ -68,13 +68,12 @@ export default function CostsPage() {
                 costLookup.set(c.route, Number(c.cost));
             });
 
-            // 3. Fetch Consolidated Orders (no limit)
+            // 3. Fetch Consolidated Orders (no limit - removed .limit())
             const { data: ordersData, error: ordersErr } = await supabase
                 .from('pedidos_consolidados')
                 .select('municipio, bairro, fase_atual, situacao, data_arquivo')
                 .gte('data_arquivo', `${startDate}T00:00:00`)
-                .lte('data_arquivo', `${endDate}T23:59:59`)
-                .limit(100000);
+                .lte('data_arquivo', `${endDate}T23:59:59`);
 
             if (ordersErr) throw ordersErr;
 
@@ -133,81 +132,99 @@ export default function CostsPage() {
 
     return (
         <div className="w-full h-full p-6 space-y-6 overflow-y-auto">
-            {/* Single Row Horizontal Banner */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl px-6 py-4 flex items-center gap-12 shadow-2xl">
-
-                {/* Section 1: Title & Description */}
-                <div className="flex-shrink-0">
-                    <h1 className="text-xl font-bold text-white tracking-tight leading-tight">
+            {/* Header Section: Title + Filters */}
+            <div className="space-y-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-white tracking-tight">
                         Gestão de Custos
                     </h1>
-                    <p className="text-slate-400 text-xs mt-0.5 leading-tight">
+                    <p className="text-slate-400 text-sm mt-1">
                         Acompanhamento financeiro detalhado por rota de entrega
                     </p>
                 </div>
 
-                {/* Section 2: Período Label */}
-                <div className="flex items-center gap-2 text-slate-400 flex-shrink-0">
-                    <Calendar size={14} />
-                    <span className="text-xs font-semibold">Período</span>
-                </div>
-
-                {/* Section 3: Date Inputs */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                    <input
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-emerald-500 outline-none w-32"
-                    />
-                    <span className="text-slate-500 text-xs">até</span>
-                    <input
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-emerald-500 outline-none w-32"
-                    />
-                    <button
-                        onClick={fetchData}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
-                    >
-                        Atualizar
-                    </button>
-                </div>
-
-                {/* Section 4: Total de Pedidos */}
-                <div className="flex flex-col items-center flex-shrink-0 min-w-[120px]">
-                    <div className="flex items-center gap-1.5 text-slate-400 mb-0.5">
-                        <Package size={12} />
-                        <span className="text-[10px] font-semibold uppercase tracking-wide">Total de Pedidos</span>
+                {/* Date Filters */}
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 text-slate-400">
+                        <Calendar size={18} />
+                        <span className="text-sm font-semibold">Período</span>
                     </div>
-                    <div className="text-2xl font-bold text-white leading-none">
-                        {totalOrders}
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        />
+                        <span className="text-slate-500 text-sm">até</span>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        />
+                        <button
+                            onClick={fetchData}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                        >
+                            Atualizar
+                        </button>
                     </div>
                 </div>
+            </div>
 
-                {/* Section 5: Custo Médio */}
-                <div className="flex flex-col items-center flex-shrink-0 min-w-[120px]">
-                    <div className="flex items-center gap-1.5 text-slate-400 mb-0.5">
-                        <AlertCircle size={12} />
-                        <span className="text-[10px] font-semibold uppercase tracking-wide">Custo Médio</span>
+            {/* KPI Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Card 1: Total de Pedidos */}
+                <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm border border-slate-700/60 rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 bg-blue-500/10 rounded-xl">
+                            <Package size={24} className="text-blue-400" />
+                        </div>
                     </div>
-                    <div className="text-2xl font-bold text-white leading-none">
-                        {totalOrders > 0 ? formatCurrency(totalCost / totalOrders) : 'R$ 0,00'}
-                    </div>
-                </div>
-
-                {/* Section 6: Custo Total */}
-                <div className="flex flex-col items-center flex-shrink-0 min-w-[120px]">
-                    <div className="flex items-center gap-1.5 text-emerald-400 mb-0.5">
-                        <DollarSign size={12} />
-                        <span className="text-[10px] font-semibold uppercase tracking-wide">Custo Total</span>
-                    </div>
-                    <div className="text-2xl font-bold text-white leading-none">
-                        {formatCurrency(totalCost)}
+                    <div className="space-y-1">
+                        <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide">
+                            Total de Pedidos
+                        </p>
+                        <p className="text-4xl font-bold text-white">
+                            {totalOrders.toLocaleString('pt-BR')}
+                        </p>
                     </div>
                 </div>
 
+                {/* Card 2: Custo Médio */}
+                <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm border border-slate-700/60 rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 bg-amber-500/10 rounded-xl">
+                            <AlertCircle size={24} className="text-amber-400" />
+                        </div>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide">
+                            Custo Médio
+                        </p>
+                        <p className="text-4xl font-bold text-white">
+                            {totalOrders > 0 ? formatCurrency(totalCost / totalOrders) : 'R$ 0,00'}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Card 3: Custo Total */}
+                <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm border border-slate-700/60 rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 bg-emerald-500/10 rounded-xl">
+                            <DollarSign size={24} className="text-emerald-400" />
+                        </div>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide">
+                            Custo Total
+                        </p>
+                        <p className="text-4xl font-bold text-white">
+                            {formatCurrency(totalCost)}
+                        </p>
+                    </div>
+                </div>
             </div>
 
             {/* Main Table */}
