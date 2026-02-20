@@ -47,10 +47,12 @@ export default function CostsPage() {
         setLoading(true);
         try {
             // 1. Routes mapping
-            const { data: routesData, error: routesErr } = await supabase
-                .from('routes')
-                .select('municipio, bairro, name');
-            if (routesErr) throw routesErr;
+            // 1. Routes mapping
+            const routesData = await fetchAllRows(
+                supabase
+                    .from('routes')
+                    .select('municipio, bairro, name')
+            );
 
             const routeLookup = new Map<string, string>();
             routesData?.forEach(r => {
