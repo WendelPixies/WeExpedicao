@@ -18,6 +18,22 @@ interface AggregatedRoute {
     orders: any[];
 }
 
+// Maps route letter → driver name keyword (case-insensitive partial match against motorista field)
+const DRIVER_ROUTE_MAP: Record<string, string> = {
+    'A': 'guilherme',
+    'A1': 'guilherme',
+    'B': 'guilherme',
+    'C': 'roberto',
+    'D': 'leandro',
+    'E': 'enilton',
+    'F': 'abeloni',
+    'G': 'carlinhos',
+    'H': 'marcos',
+    'I': 'marcos',
+    'M1': 'paulo',
+    'M2': 'diogo',
+};
+
 import { fetchAllRows } from '../lib/utils';
 
 export default function CostsPage() {
@@ -28,6 +44,8 @@ export default function CostsPage() {
     const [totalCost, setTotalCost] = useState(0);
     const [totalOrders, setTotalOrders] = useState(0);
     const [selectedRoute, setSelectedRoute] = useState<AggregatedRoute | null>(null);
+    const [modalRows, setModalRows] = useState<{ rotaNumero: string; dataColeta: string; quantidade: number }[]>([]);
+    const [modalLoading, setModalLoading] = useState(false);
 
     useEffect(() => {
         const now = new Date();
@@ -36,6 +54,60 @@ export default function CostsPage() {
         setStartDate(firstDay.toISOString().split('T')[0]);
         setEndDate(lastDay.toISOString().split('T')[0]);
     }, []);
+
+    // When a route card is clicked, fetch all orders for that driver directly
+    useEffect(() => {
+        if (!selectedRoute || !startDate || !endDate) return;
+
+        const driverKeyword = DRIVER_ROUTE_MAP[selectedRoute.route.trim().toUpperCase()] || null;
+        if (!driverKeyword) {
+            setModalRows([]);
+            return;
+        }
+
+        const fetchModalData = async () => {
+            setModalLoading(true);
+            try {
+                const data = await fetchAllRows(
+                    supabase
+                        .from('pedidos_consolidados')
+                        .select('rota, data_arquivo')
+                        .ilike('motorista', `%${driverKeyword}%`)
+                        .gte('data_arquivo', `${startDate}T00:00:00`)
+                        .lte('data_arquivo', `${endDate}T23:59:59`)
+                );
+
+                // Group by Rota Número + date
+                const grouped = new Map<string, { rotaNumero: string; dataColeta: string; quantidade: number }>();
+                data.forEach((order: any) => {
+                    const rotaNum = order.rota || 'Sem Nº de Rota';
+                    const dataColeta = order.data_arquivo
+                        ? new Date(order.data_arquivo).toLocaleDateString('pt-BR')
+                        : '-';
+                    const key = `${rotaNum}||${dataColeta}`;
+                    const existing = grouped.get(key) || { rotaNumero: rotaNum, dataColeta, quantidade: 0 };
+                    existing.quantidade += 1;
+                    grouped.set(key, existing);
+                });
+
+                const rows = Array.from(grouped.values()).sort((a, b) => {
+                    const dateA = a.dataColeta.split('/').reverse().join('');
+                    const dateB = b.dataColeta.split('/').reverse().join('');
+                    if (dateB !== dateA) return dateB.localeCompare(dateA);
+                    return a.rotaNumero.localeCompare(b.rotaNumero);
+                });
+
+                setModalRows(rows);
+            } catch (err) {
+                console.error('Error fetching modal data:', err);
+                setModalRows([]);
+            } finally {
+                setModalLoading(false);
+            }
+        };
+
+        fetchModalData();
+    }, [selectedRoute, startDate, endDate]);
 
     useEffect(() => {
         if (startDate && endDate) {
@@ -77,7 +149,7 @@ export default function CostsPage() {
             const ordersData = await fetchAllRows(
                 supabase
                     .from('pedidos_consolidados')
-                    .select('municipio, bairro, fase_atual, situacao, data_arquivo')
+                    .select('municipio, bairro, fase_atual, situacao, data_arquivo, rota, motorista')
                     .gte('data_arquivo', `${startDate}T00:00:00`)
                     .lte('data_arquivo', `${endDate}T23:59:59`)
             );
@@ -364,51 +436,45 @@ export default function CostsPage() {
                                 </button>
                             </div>
                             <div style={{ overflow: 'auto', padding: '1.5rem' }}>
-                                <table style={{ width: '100%', fontSize: '0.875rem', borderCollapse: 'collapse' }}>
-                                    <thead>
-                                        <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
-                                            <th style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>ID</th>
-                                            <th style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>Data</th>
-                                            <th style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>Cliente/Nome</th>
-                                            <th style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>Localização</th>
-                                            <th style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>Situação</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {selectedRoute.orders.sort((a: any, b: any) => new Date(b.data_arquivo).getTime() - new Date(a.data_arquivo).getTime()).map((order: any, idx: number) => (
-                                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                                <td style={{ padding: '0.75rem' }}>
-                                                    <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
-                                                        {order.id?.toString().slice(0, 8) || '-'}
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '0.75rem' }}>
-                                                    {new Date(order.data_arquivo).toLocaleDateString('pt-BR')}
-                                                </td>
-                                                <td style={{ padding: '0.75rem' }}>
-                                                    {order.nome_pessoa || '-'}
-                                                </td>
-                                                <td style={{ padding: '0.75rem' }}>
-                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                        <span>{order.bairro}</span>
-                                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{order.municipio}</span>
-                                                    </div>
-                                                </td>
-                                                <td style={{ padding: '0.75rem' }}>
-                                                    <span style={{
-                                                        padding: '2px 8px',
-                                                        borderRadius: '999px',
-                                                        fontSize: '0.75rem',
-                                                        background: order.fase_atual === 'Entregue' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255,255,255,0.05)',
-                                                        color: order.fase_atual === 'Entregue' ? 'var(--success)' : 'var(--text-muted)'
-                                                    }}>
-                                                        {order.fase_atual}
-                                                    </span>
-                                                </td>
+                                {modalLoading ? (
+                                    <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                        <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 0.5rem' }} />
+                                        <p>Carregando rotas...</p>
+                                    </div>
+                                ) : modalRows.length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                        Nenhuma Rota Número encontrada para este motorista no período.
+                                    </div>
+                                ) : (
+                                    <table style={{ width: '100%', fontSize: '0.875rem', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
+                                                <th style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>Nº da Rota</th>
+                                                <th style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>Data de Coleta</th>
+                                                <th style={{ padding: '0.75rem', color: 'var(--text-muted)', textAlign: 'right' }}>Qtd. Pedidos</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {modalRows.map((row, idx) => (
+                                                <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                    <td style={{ padding: '0.75rem' }}>
+                                                        <span style={{ background: 'rgba(99,102,241,0.12)', color: 'var(--primary)', padding: '2px 10px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem' }}>
+                                                            {row.rotaNumero}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', color: 'var(--text-main)' }}>
+                                                        {row.dataColeta}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>
+                                                        <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--success)' }}>
+                                                            {row.quantidade}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
                             </div>
                             <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', textAlign: 'right' }}>
                                 <button
@@ -422,7 +488,6 @@ export default function CostsPage() {
                     </div>
                 )
             }
-        </div >
+        </div>
     );
 }
-
