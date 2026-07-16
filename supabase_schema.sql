@@ -135,3 +135,14 @@ CREATE TABLE IF NOT EXISTS order_overrides (
 ALTER TABLE order_overrides ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public Access Overrides" ON order_overrides FOR ALL USING (true);
 
+-- 10. Tabela de Motoristas (para envio de mensagens via n8n sobre rotas atrasadas)
+CREATE TABLE IF NOT EXISTS motoristas (
+    id SERIAL PRIMARY KEY,
+    nome TEXT NOT NULL,
+    celular TEXT NOT NULL, -- Somente dígitos (DDD + número, opcionalmente com DDI)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE motoristas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Access Motoristas" ON motoristas FOR ALL USING (true);
+

@@ -142,6 +142,17 @@ export default function OrdersPage() {
         return new Date(date).toLocaleDateString('pt-BR');
     };
 
+    const formatDateTime = (date: string) => {
+        if (!date) return '-';
+        return new Date(date).toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
     return (
         <div className="animate-fade">
             <header className="header">
@@ -226,9 +237,11 @@ export default function OrdersPage() {
                             <th>ID Interno</th>
                             <th>Omni</th>
                             <th>Rota</th>
+                            <th>Nº Rota (CSV)</th>
                             <th>Cliente</th>
                             <th>Fase Atual</th>
                             <th>Aprovado em</th>
+                            <th>Data Coleta</th>
                             <th>Entregue em</th>
                             <th>Dias Corridos</th>
                             <th>SLA</th>
@@ -262,6 +275,15 @@ export default function OrdersPage() {
 
                             const personName = p.nome_pessoa ? p.nome_pessoa.replace(/\*/g, '').trim().toUpperCase() : '';
                             const route = routesMap[personName] || '-';
+
+                            // Detecta ocorrências especiais vindas do CSV (Última Ocorrência / Situação)
+                            const occText = `${p.ultima_ocorrencia || ''} ${p.situacao || ''}`.toLowerCase();
+                            let specialStatus: { label: string; color: string } | null = null;
+                            if (occText.includes('devolv')) {
+                                specialStatus = { label: 'DEVOLVIDO', color: '#f97316' };
+                            } else if (occText.includes('ausente')) {
+                                specialStatus = { label: 'DESTINATÁRIO AUSENTE', color: '#facc15' };
+                            }
 
                             return (
                                 <tr key={p.id} className="group relative">
@@ -310,6 +332,9 @@ export default function OrdersPage() {
                                         <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{route}</span>
                                     </td>
                                     <td>
+                                        <span style={{ color: 'var(--text-muted)' }}>{p.rota || '-'}</span>
+                                    </td>
+                                    <td>
                                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                                             <span>{p.nome_pessoa}</span>
                                             <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
@@ -330,6 +355,7 @@ export default function OrdersPage() {
                                         </span>
                                     </td>
                                     <td>{formatDate(p.aprovado_at)}</td>
+                                    <td>{formatDateTime(p.despachado_at)}</td>
                                     <td>{p.entregue_at ? new Date(p.entregue_at).toLocaleDateString('pt-BR') : '-'}</td>
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -339,13 +365,22 @@ export default function OrdersPage() {
                                         </div>
                                     </td>
                                     <td>
-                                        <span className={`sla-badge ${isLate ? 'late' : 'on-time'}`}>
-                                            {isLate
-                                                ? (p.fase_atual === 'Entregue'
-                                                    ? (p.entregue_at ? 'ENTREGUE COM ATRASO' : 'SEM ENTREGA')
-                                                    : 'ATRASADO')
-                                                : 'NO PRAZO'}
-                                        </span>
+                                        {specialStatus ? (
+                                            <span className="sla-badge" style={{
+                                                background: `${specialStatus.color}1a`,
+                                                color: specialStatus.color
+                                            }}>
+                                                {specialStatus.label}
+                                            </span>
+                                        ) : (
+                                            <span className={`sla-badge ${isLate ? 'late' : 'on-time'}`}>
+                                                {isLate
+                                                    ? (p.fase_atual === 'Entregue'
+                                                        ? (p.entregue_at ? 'ENTREGUE COM ATRASO' : 'SEM ENTREGA')
+                                                        : 'ATRASADO')
+                                                    : 'NO PRAZO'}
+                                            </span>
+                                        )}
                                     </td>
                                     <td>{p.motorista || p.transportadora || '-'}</td>
                                 </tr>
@@ -353,7 +388,7 @@ export default function OrdersPage() {
                         })}
                         {filtered.length === 0 && !loading && (
                             <tr>
-                                <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                                <td colSpan={12} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                                     Nenhum pedido encontrado.
                                 </td>
                             </tr>

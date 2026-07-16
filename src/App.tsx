@@ -8,6 +8,7 @@ import ImportPage from './pages/Import';
 import Settings from './pages/Settings';
 import ReturnsPage from './pages/Returns';
 import CostsPage from './pages/Costs';
+import DriversPage from './pages/Drivers';
 
 function App() {
   const [collapsed, setCollapsed] = useState(false);
@@ -22,6 +23,7 @@ function App() {
           <Route path="/pedidos" element={<OrdersPage />} />
           <Route path="/devolucao" element={<ReturnsPage />} />
           <Route path="/custos" element={<CostsPage />} />
+          <Route path="/motoristas" element={<DriversPage />} />
           <Route path="/importar" element={<ImportPage />} />
           <Route path="/configuracoes" element={<Settings />} />
         </Routes>

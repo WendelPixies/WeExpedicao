@@ -9,7 +9,8 @@ import {
     Menu,
     FileUp,
     RotateCcw,
-    DollarSign
+    DollarSign,
+    Truck
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -25,6 +26,7 @@ export default function Sidebar({ collapsed, toggleCollapse }: SidebarProps) {
         { to: '/devolucao', icon: RotateCcw, label: 'Devolução' },
         { to: '/importar', icon: FileUp, label: 'Importar' },
         { to: '/custos', icon: DollarSign, label: 'Custos' },
+        { to: '/motoristas', icon: Truck, label: 'Motoristas' },
         { to: '/configuracoes', icon: Settings, label: 'Configurações' },
     ];
 
